@@ -53,7 +53,7 @@ it, not exactly (run `node collection/traits.mjs --simulate`).
 | Night | **yes 6** | Always night, whatever the block time |
 
 Every piece also gets its own stretch of seabed around the same hand-placed rocks, its own sun direction and light
-shaft strength, and its own starting viewpoint and heading.
+shaft strength, a shift of its palette's hue and brightness, and its own starting viewpoint and heading.
 
 ## Costs
 

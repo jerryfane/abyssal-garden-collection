@@ -29,13 +29,20 @@ const AG_DEP = { Shallows: [.8, .8, 1.15, 1.3, .95, 1], Midwater: [1, 1, 1, 1, 1
 // terrain: plateau threshold shift, plateau height, floor relief, rock roughness, height of the designed rock masses
 const AG_TER = { Canyons: [0, 1, 1, 1, 1], Highlands: [-.04, 1.3, 1.6, 1.1, 1.35], Lowlands: [.06, .6, .45, .8, .55], Badlands: [0, 1, 2, 1.8, 1.1] };
 const AG_KELP = { Sparse: .5, Lush: 1, Overgrown: 1.4 };
-const agPiece = (o, ox, oz, view, sun, rays) => {
-  const pal = AG_PAL[o.palette], w = pal.slice(0, 3), m = Math.max(...w), cn = w.map((c) => c / m);
+// hue: turn the water, purple-zone water and ambient colours around the grey axis by this angle; lum: their brightness.
+// Both 0 / 1 only in the genesis garden, which keeps its light exactly as first made.
+const agPiece = (o, ox, oz, view, sun, rays, hue = 0, lum = 1) => {
+  const g = !hue, pal = AG_PAL[o.palette].slice(), C = Math.cos(hue), S = Math.sin(hue) / Math.sqrt(3), K = (1 - C) / 3;
+  if (!g) for (const i of [0, 3, 9]) {
+    const [r, gr, b] = pal.slice(i, i + 3), d = K * (r + gr + b);
+    pal.splice(i, 3, ...[r * C + S * (b - gr) + d, gr * C + S * (r - b) + d, b * C + S * (gr - r) + d].map((c) => Math.max(.005, c * lum)));
+  }
+  const w = pal.slice(0, 3), m = Math.max(...w), cn = w.map((c) => c / m);
   // light is absorbed least in the water's own colour: that is what turns the distance amber, violet or green
-  const kd = o.palette === 'Lagoon' ? [.056, .0245, .017] : cn.map((c) => .066 - .046 * c);
+  const kd = g ? [.056, .0245, .017] : cn.map((c) => .066 - .046 * c);
   return { ...o, ox, oz, view, sun, rays, pal, dep: AG_DEP[o.depth], ter: AG_TER[o.terrain], km: AG_KELP[o.kelp], kd,
-    si: o.palette === 'Lagoon' ? [.058, .0235, .0195] : kd.map((k) => k * 1.04),
-    sky: o.palette === 'Lagoon' ? [.30, .78, 1] : cn.map((c) => (.2 + .85 * c) * Math.min(1, m * 1.6)) };
+    si: g ? [.058, .0235, .0195] : kd.map((k) => k * 1.04),
+    sky: g ? [.30, .78, 1] : cn.map((c) => (.2 + .85 * c) * Math.min(1, m * 1.6)) };
 };
 
 // the garden as it was first made: what the engine shows without a piece config
@@ -52,7 +59,9 @@ export function params(seed) {
   const o = {};
   for (const k in TRAITS) { const T = TRAITS[k]; let u = r() * T.reduce((a, v) => a + v[1], 0); o[k] = T.find((v) => (u -= v[1]) < 0)[0]; }
   // where the terrain noise is read (every piece gets its own seabed around the same hand-placed landmarks), where the
-  // dive starts (main.js picks a viewpoint from it), the sun (low and slanted in the deep) and how dense its shafts are
+  // dive starts (main.js picks a viewpoint from it), the sun (low and slanted in the deep), how dense its shafts are,
+  // and a shift of the palette's hue (±20°) and brightness, so two pieces of one palette still differ
   const ox = r() * 4e3 - 2e3, oz = r() * 4e3 - 2e3, view = r(), a = r() * 6.2832, tilt = .12 + r() * (o.depth === 'Abyss' ? .8 : .5);
-  return agPiece(o, ox, oz, view, [Math.sin(a) * tilt, 1, Math.cos(a) * tilt], .55 + r() * 1.3);
+  const rays = .55 + r() * 1.3, hue = (r() < .5 ? -1 : 1) * (.12 + r() * .23), lum = .78 + r() * .44;
+  return agPiece(o, ox, oz, view, [Math.sin(a) * tilt, 1, Math.cos(a) * tilt], rays, hue, lum);
 }
