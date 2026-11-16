@@ -27,7 +27,8 @@ fn wor(p: vec3f) -> f32 {
 
 // ---------------------------------------------------------------- terrain density (compute)
 const W_DENS = W_NOISE + /*wgsl*/`
-struct U { n: vec4u, o: vec4f, c: vec4u };
+// t.xz: where the seabed noise is read (0 for genesis); k: plateau threshold shift, plateau height, floor relief, roughness
+struct U { n: vec4u, o: vec4f, c: vec4u, t: vec4f, k: vec4f };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var<storage, read_write> D: array<f32>;
 @group(0) @binding(2) var<storage, read> P: array<vec4f>;
@@ -38,8 +39,9 @@ fn seg3(p: vec3f, a: vec3f, b: vec3f) -> f32 { let pa = p - a; let ba = b - a; l
 fn dens(p: vec3f) -> f32 {
   let w = vec3f(fbm(p * .04 + 11., 3), fbm(p * .04 + 47., 3), fbm(p * .04 + 83., 3)) - .5;
   let q = p + w * vec3f(15., 6., 15.);
-  let g0 = -45.5 + 7. * (fbm(vec3f(q.xz * .011, 3.), 4) - .5) + 1.6 * (fbm(vec3f(q.xz * .07, 9.), 3) - .5);
-  let tn = 3. * (fbm(vec3f(q.xz * .09, 2.), 3) - .5);
+  let qn = q + u.t.xyz;
+  let g0 = -45.5 + 7. * u.k.z * (fbm(vec3f(qn.xz * .011, 3.), 4) - .5) + 1.6 * (fbm(vec3f(qn.xz * .07, 9.), 3) - .5);
+  let tn = 3. * (fbm(vec3f(qn.xz * .09, 2.), 3) - .5);
   var dm = -1e3; var de = 1e3;
   var k = 0u;
   for (var i = 0u; i < u.c.x; i++) {
@@ -57,10 +59,10 @@ fn dens(p: vec3f) -> f32 {
     clr = max(clr, 1. - ss(0., b.y, seg2(q.xz, a.xy, a.zw) - b.x));
   }
   let rad = length(p.xz) + w.x * 14.;
-  let n = fbm(vec3f(q.xz * .0125, 1.7), 4);
+  let n = fbm(vec3f(qn.xz * .0125, 1.7), 4);
   let ring = ss(156., 172., rad);
-  let plat = max(ss(.5, .565, n) * (1. - clr), ring);
-  let th = g0 + plat * mix(26. + 17. * fbm(vec3f(q.xz * .03, 5.), 2), 60., ring);
+  let plat = max(ss(.5 + u.k.x, .565 + u.k.x, n) * (1. - clr), ring);
+  let th = g0 + plat * mix((26. + 17. * fbm(vec3f(qn.xz * .03, 5.), 2)) * u.k.y, 60., ring);
   var d = smax(g0 + 4.5 * ss(10., 0., de) - p.y, dm, 3.);
   d = smax(d, (th - p.y) * .7, 3.);
   k = u.c.x * 2u;
@@ -73,7 +75,7 @@ fn dens(p: vec3f) -> f32 {
   }
   let hg = p.y - g0;
   let rk = mix(.25, 1., ss(.5, 5., hg));
-  d += rk * ((.5 - wor(p * .17 + w * 2.)) * 3.4 + (.5 - wor(p * .41 + 7.)) * 1.3 + (fbm(p * .3, 3) - .5) * 2.2);
+  d += rk * u.k.w * ((.5 - wor(p * .17 + w * 2.)) * 3.4 + (.5 - wor(p * .41 + 7.)) * 1.3 + (fbm(p * .3, 3) - .5) * 2.2);
   d += rk * 2.2 * (abs(fract(p.y * .21 + w.y * 2.2) - .5) - .25);
   for (var i = 0u; i < u.c.z; i++) {
     let a = P[k]; let b = P[k + 1u]; k += 2u;
@@ -190,30 +192,31 @@ const WK = array<vec3f, 10>(vec3f(1., 2., 1.), vec3f(-2., 1., .9), vec3f(3., 1.,
 
 // ---------------------------------------------------------------- shared scene code
 const S_G = /*wgsl*/`
-struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f };
-const SIG = vec3f(.058, .0235, .0195);
+// the piece (main.js fills them from params.js): wc water colour + fog density scale, pc water colour in the purple
+// zone + light falloff scale, sc sunlight + bioluminescence, am ambient + daylight, kt kelp tint + growth, ct coral
+// tint, gl trench glow + trench on/off
+struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f,
+  wc: vec4f, pc: vec4f, sc: vec4f, am: vec4f, kt: vec4f, ct: vec4f, gl: vec4f };
+const SIG0 = vec3f(.058, .0235, .0195);
 const KD = vec3f(.056, .0245, .0170);
-const WCOL = vec3f(.16, .58, .90);
 const KDZ = vec3f(.034, .023, .018);
-const PCOL = vec3f(.58, .66, .98);
-const SUNC = vec3f(1.7, 1.6, 1.45);
 const TAU = 6.2831853;
 const LOW = ${LV > 1};
 fn sat(x: f32) -> f32 { return clamp(x, 0., 1.); }
 fn ss(a: f32, b: f32, x: f32) -> f32 { let t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); }
 fn ign(p: vec2f) -> f32 { return fract(52.9829189 * fract(dot(p, vec2f(.06711056, .00583715)))); }
 fn hs(x: f32) -> f32 { return fract(sin(x * 127.1) * 43758.5453); }
-fn kd(z: f32) -> vec3f { return mix(KD, KDZ, z); }
-fn sg(z: f32) -> vec3f { return mix(SIG, vec3f(.034, .026, .022), z); }
+fn kd(z: f32) -> vec3f { return mix(KD, KDZ, z) * g.pc.w; }
+fn sg(z: f32) -> vec3f { return mix(SIG0, vec3f(.034, .026, .022), z) * g.wc.w; }
 fn fin(c: vec3f) -> vec4f { return vec4f(min(max(c, vec3f(0.)), vec3f(40.)), 1.); }
 const KDF = vec3f(.043, .045, .042);
 fn fogIn(ro: vec3f, rd: vec3f, d: f32, z: f32, sun: vec3f) -> vec3f {
-  let k = mix(KD, KDF, z);
+  let k = mix(KD, KDF, z) * g.pc.w;
   let a = sg(z) - k * rd.y;
   let I = (1. - exp(-a * d)) / a;
   let mu = max(dot(rd, sun), 0.);
   let m2 = mu * mu;
-  return mix(WCOL, PCOL, z) * sg(z) * exp(k * ro.y) * I * (1.22 + .3 * m2 * m2);
+  return mix(g.wc.xyz, g.pc.xyz, z) * sg(z) * exp(k * ro.y) * I * (1.22 + .3 * m2 * m2);
 }
 `;
 
@@ -254,14 +257,14 @@ fn caus2(p: vec3f, d: f32) -> f32 {
   let c = min(pow(textureSample(tW, sR, q / 4.1).r, 1.4) * 2.6 * (.45 + textureSample(tW, sR, q.yx / 6.9 + .37).r * 1.3), 2.6);
   return mix(c, .33, ss(35., 100., d));
 }
-fn sunE(y: f32, z: f32) -> vec3f { return SUNC * exp(kd(z) * (min(y, 0.) / g.sun.y)) * (.5 + .5 * sat(-y / 30.)); }
+fn sunE(y: f32, z: f32) -> vec3f { return g.sc.xyz * exp(kd(z) * (min(y, 0.) / g.sun.y)) * (.5 + .5 * sat(-y / 30.)); }
 fn vol(p: vec3f) -> vec4f { return textureSampleLevel(tV, sC, (p - vec3f(-192., -56., -192.)) / vec3f(384., 60., 384.), 0.); }
 fn amb(p: vec3f, n: vec3f, sky: f32, z: f32) -> vec3f {
   let up = n.y * .5 + .5;
-  return mix(vec3f(.22, .60, .80), vec3f(.34, .56, .82), z) * exp(kd(z) * min(p.y, 0.) * 1.2) * (.3 + .7 * sky) * (.24 + .76 * up * up) * 1.3 * (.55 + .45 * sat(-p.y / 30.)) + vec3f(.003, .010, .016);
+  return mix(g.am.xyz, vec3f(.34, .56, .82) * g.am.w, z) * exp(kd(z) * min(p.y, 0.) * 1.2) * (.3 + .7 * sky) * (.24 + .76 * up * up) * 1.3 * (.55 + .45 * sat(-p.y / 30.)) + vec3f(.003, .010, .016);
 }
 fn zone(p: vec3f) -> f32 { return mix(g.sun.w, textureSampleLevel(tM, sC, p.xz / 384. + .5, 0.).b, .2); }
-fn side(p: vec3f, n: vec3f, open: f32, z: f32) -> vec3f { return mix(WCOL, PCOL, z) * exp(kd(z) * min(p.y, 0.)) * open * (1. - abs(n.y)) * .7; }
+fn side(p: vec3f, n: vec3f, open: f32, z: f32) -> vec3f { return mix(g.wc.xyz, g.pc.xyz, z) * exp(kd(z) * min(p.y, 0.)) * open * (1. - abs(n.y)) * .7; }
 // skylight at most 150 m along the ray: past that, terrain and the background behind it (vsB) get the same haze
 fn fog(c: vec3f, wp: vec3f, z: f32) -> vec3f {
   let v = wp - g.cam.xyz; let d = length(v); let rd = v / d;
@@ -330,9 +333,12 @@ fn tri(p: vec3f, n: vec3f, s: f32) -> TP {
     if (mat == 0) {
       alb = mix(alb, vec3f(.13, .15, .14) * (.55 + .6 * B.h), flt * gm.a * .7);
       let mg = flt * sat(gm.r * 1.5 - .45 + (B.c - .5) * 1.6) * ss(.35, .6, A.h) * ss(-34., -40., i.wp.y);
-      alb = mix(alb, vec3f(.20, .02, .12) * (.4 + .9 * B.h), mg * .8);
+      alb = mix(alb, vec3f(.20, .02, .12) * g.ct.xyz * (.4 + .9 * B.h), mg * .8);
       flu = mg * .35;
       alb = mix(alb, alb * vec3f(.85, .8, 1.4) + vec3f(.015, .0, .05), gm.b * .8);
+      // glowing trench (a rare trait): veins of light along the floor of the cut through the purple grotto
+      let tr = g.gl.w * ss(9., 3., length(vec2f(max(abs(i.wp.x - 5.) - 35., 0.), i.wp.z - 90.))) * ss(-43., -48., i.wp.y);
+      emi = g.gl.xyz * tr * (.15 + 3. * ss(.5, .72, B.c * .7 + A.h * .4));
     }
   } else if (mat == 2) {
     // whale fluke: smooth pale stone with dark streaks running along its length
@@ -349,16 +355,16 @@ fn tri(p: vec3f, n: vec3f, s: f32) -> TP {
     let hue = fract(sd * 7.31);
     alb = mix(vec3f(.60, .17, .08), vec3f(.64, .35, .10), fract(hue * 3.));
     if (hue > .75) { alb = vec3f(.44, .18, .42); }
-    alb *= (.45 + .75 * B.h) * (.7 + .3 * C.h);
+    alb *= (.45 + .75 * B.h) * (.7 + .3 * C.h) * g.ct.xyz;
     vao = i.ao * i.ao; gloss = .2; bump = 1.4; flu = .55;
   } else {
     let hue = fract(sd * 5.73);
     alb = mix(vec3f(.80, .08, .10), vec3f(.90, .22, .40), fract(hue * 4.));
     if (hue > .7) { alb = vec3f(.88, .42, .10); }
     if (hue > .9) { alb = vec3f(.55, .22, .75); }
-    alb *= (.4 + .8 * B.h) * (.5 + .9 * i.ao * i.ao);
+    alb *= (.4 + .8 * B.h) * (.5 + .9 * i.ao * i.ao) * g.ct.xyz;
     alb = mix(alb, vec3f(1., .75, .6), ss(.8, 1., i.ao) * .35);
-    emi = alb * .01; flu = .75; gloss = .25; bump = 1.5;
+    emi = alb * .01 * g.sc.w; flu = .75; gloss = .25; bump = 1.5;
   }
   let rip = select(0., flt * gm.a * cos((i.wp.x * .8 + i.wp.z * .35) * 5. + A.c * 9.) * .65, mat == 0);
   let N = normalize(qrot(i.q, normalize(on + (A.n * .85 + B.n * .65 + C.n * .45 * ss(60., 12., dist) + F.n * .5 * fk) * bump + vec3f(.8, sgro, .35) * vec3f(rip, 1., rip))));
@@ -441,7 +447,7 @@ fn pal(h: f32) -> vec3f {
   let sw = sway(i.a.xz, hA + (p.y - i.a.y), t);
   p.x += sw.x; p.z += sw.y;
   o.cp = g.vp * vec4f(p, 1.); o.wp = p; o.n = normalize(N2 + S * u * .55 - T0 * cos(v * 10. + s2 * 30. + t * .6) * u * .7 * nearK); o.uv = vec2f(u, v);
-  o.col = col; o.pr = pr; o.sd = vec2f(s1, s2); o.spc = spc;
+  o.col = col * select(g.kt.xyz, g.ct.xyz, ty == 5 || ty == 6); o.pr = pr; o.sd = vec2f(s1, s2); o.spc = spc;
   return o;
 }
 struct GO { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) @interpolate(flat) col: vec3f };
@@ -458,7 +464,7 @@ struct GO { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) @
   let z = zone(p);
   let lit = .3 + 1.8 * shadow1(p) * sunE(p.y, z).g;
   let e = b.z / sz;
-  o.col = pal(b.y) * (.12 + tw * 1.7) * lit * e * e * exp(-SIG.g * d) * ss(.4, 1.5, d) * 17.;
+  o.col = pal(b.y) * (.12 + tw * 1.7) * lit * e * e * exp(-sg(0.).g * d) * ss(.4, 1.5, d) * 17. * g.sc.w;
   return o;
 }
 @fragment fn fsGl(i: GO) -> @location(0) vec4f {
@@ -487,7 +493,7 @@ struct GO { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) @
   let H = normalize(V + L);
   c += E * (pow(sat(dot(n, H)), 40.) * (.45 + ir * i.pr.z * 2.) + pow(sat(dot(n, H)), 9.) * .07) + am * ir * i.pr.z * pow(1. - ndv, 3.) * 1.5;
   c += E * trc * i.pr.y * pow(sat(dot(-V, L)), 3.) * 1.2;
-  c += alb * i.pr.w * (.5 + 3. * dot(am + E * .3, vec3f(.1, .5, .5)));
+  c += alb * i.pr.w * (.5 * g.sc.w + 3. * dot(am + E * .3, vec3f(.1, .5, .5)));
   // sparkle: whole-leaf glints that twinkle slowly
   let tw = pow(.5 + .5 * sin(g.cam.w * (.5 + i.sd.y * 1.4) + i.sd.x * 90.), 5.);
   let m = ss(.2, .0, abs(i.uv.y - (.35 + .45 * i.sd.y))) * (1. - i.uv.x * i.uv.x);
@@ -599,7 +605,7 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f };
   let rr = refract(V, n, 1.33);
   let sd = max(dot(rr, g.sun.xyz), 0.);
   let fr = pow(1. - sqrt(max(k, 0.)), 5.);
-  let sky = (vec3f(.30, .78, 1.) * 1.3 * clamp(1. + 3.8 * (s.x * .6 - s.y * .8), .25, 3.) + vec3f(1., .95, .85) * (pow(sd, 60.) * 1.3 + pow(sd, 500.) * 12.)) * (1. - fr);
+  let sky = (vec3f(.30, .78, 1.) * 1.3 * clamp(1. + 3.8 * (s.x * .6 - s.y * .8), .25, 3.) + vec3f(1., .95, .85) * (pow(sd, 60.) * 1.3 + pow(sd, 500.) * 12.)) * (1. - fr) * g.am.w;
   let z = zone(i.wp);
   let R = reflect(V, n);
   let refl = fogIn(i.wp, R, 300., z, g.sun.xyz) * 1.15;
@@ -654,7 +660,7 @@ fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
   var c = mix(lo, hi, ss(-.5, .8, i.uv.y + rim * .4)) * (.5 + 1.2 * rim) + E * hl * 1.6;
   var al = disc * sat(.03 + rim * rim * rim * .9 + hl);
   let v = i.wp - g.cam.xyz; let d = length(v);
-  let T = exp(-SIG.g * d) * ss(1.2, 3., d);
+  let T = exp(-sg(0.).g * d) * ss(1.2, 3., d);
   c = c * T + fogIn(g.cam.xyz, v / d, d, z, g.sun.xyz) * (1. - T);
   al *= mix(.35, 1., T);
   return vec4f(min(max(c * al, vec3f(0.)), vec3f(20.)), al);
@@ -678,7 +684,7 @@ fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
   let m = ss(1., .2, r);
   let z = zone(i.wp);
   let c = (sunE(i.wp.y, z) * i.pr.y * .8 + amb(i.wp, vec3f(0., 1., 0.), 1., z) * .3) * mix(vec3f(1.), vec3f(.7, 1., .9), i.pr.z);
-  return vec4f(min(max(c * m * m * i.pr.x * exp(-SIG.g * i.pr.w), vec3f(0.)), vec3f(8.)), 0.);
+  return vec4f(min(max(c * m * m * i.pr.x * exp(-sg(0.).g * i.pr.w), vec3f(0.)), vec3f(8.)), 0.);
 }
 `;
 
@@ -718,8 +724,8 @@ const W_RAYS = S_G + W_FS + /*wgsl*/`
   }
   let mu = max(dot(rd, sx), 0.);
   let ph = mix(.2 + 2.0 * mu * mu * mu, .8, g.sun.w);
-  let wc = mix(WCOL + vec3f(.04, .07, .05), PCOL + vec3f(.28, .16, .12), g.sun.w);
-  return vec4f(min(acc * dt * sgz * wc * SUNC * ph * g.mis.y * (1. - .55 * g.sun.w), vec3f(20.)), zl);
+  let wc = mix(g.wc.xyz + vec3f(.04, .07, .05), g.pc.xyz + vec3f(.28, .16, .12), g.sun.w);
+  return vec4f(min(acc * dt * sgz * wc * g.sc.xyz * ph * g.mis.y * (1. - .55 * g.sun.w), vec3f(20.)), zl);
 }
 `;
 // depth-aware 3x3 blur of the half-res shafts (hides the sampling dither)
