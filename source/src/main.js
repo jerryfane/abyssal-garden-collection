@@ -15,10 +15,18 @@ const say = (m, to, ms) => {
   // go on once the animation runs: one not started before the thread gets busy stays stuck (timer: hidden tabs)
   return new Promise((r) => { a.ready.then(() => setTimeout(r)); setTimeout(r, document.hidden ? 0 : 1e3); });
 };
-const fail = (m) => { throw new Error(m, { cause: 1 }); }; // cause marks a message that is shown as it is
-if (!navigator.gpu) fail('This scene needs WebGPU. Try a current Chrome or Edge.');
-const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-if (!adapter) fail('No WebGPU adapter found.');
+// the piece: a child inscription sets AG (chain.js reads its block); without AG this is the genesis garden
+const AG = globalThis.AG, ON = AG && await chain(AG), PIECE = AG ? params(ON.seed) : GENESIS;
+if (AG) _seed = RS = ON.seed | 0;
+PIECE.gs = AG ? 0.5 + 0.5 * clamp(ON.grow, 0, 1) : 1; // growth: kelp height, kelp and fish counts
+// daylight from the hour of the latest block: full day ~10-16 UTC, night ~20-6, dusk and dawn between
+const DAY = !AG ? 1 : PIECE.night ? 0 : clamp(0.5 + cos((ON.hour - 13) * PI / 12), 0, 1);
+const NAME = AG ? 'Abyssal Garden #' + ((AG.n | 0) + 1) : 'Abyssal Garden';
+const TRAITS_LINE = [PIECE.palette, PIECE.depth, PIECE.terrain, PIECE.kelp + ' kelp', PIECE.wreck && 'Wreck', PIECE.trench && 'Glowing trench', PIECE.night && 'Night'].filter(Boolean).join(' · ');
+if (AG) { document.title = NAME; $('t').textContent = TRAITS_LINE; }
+// no WebGPU (or no adapter): a painted card of this piece instead of the dive
+const adapter = navigator.gpu && await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => 0);
+if (!adapter) return card();
 $('w').hidden = !!navigator.userAgentData; // only Chromium-based browsers have it
 const hasTS = adapter.features.has('timestamp-query');
 const device = await adapter.requestDevice({ requiredFeatures: hasTS ? ['timestamp-query'] : [] });
@@ -48,8 +56,8 @@ const tDetail = tex(1024, 1024, 'rgba8unorm', TU.RENDER_ATTACHMENT | TU.TEXTURE_
 const tVol = tex(NX / 2, NY / 2, 'rg8unorm', TU.TEXTURE_BINDING | TU.COPY_DST, { d: NZ / 2 });
 const tMap = tex(512, 512, 'rgba8unorm', TU.TEXTURE_BINDING | TU.COPY_DST);
 
-const UB = new Float32Array(60), UBS = new Float32Array(60);
-const ubo = device.createBuffer({ size: 240, usage: BU.UNIFORM | BU.COPY_DST }), uboS = device.createBuffer({ size: 240, usage: BU.UNIFORM | BU.COPY_DST });
+const UB = new Float32Array(88), UBS = new Float32Array(88);
+const ubo = device.createBuffer({ size: 352, usage: BU.UNIFORM | BU.COPY_DST }), uboS = device.createBuffer({ size: 352, usage: BU.UNIFORM | BU.COPY_DST });
 const WT = new Float32Array(4), uboW = device.createBuffer({ size: 16, usage: BU.UNIFORM | BU.COPY_DST });
 
 const VF = SS.VERTEX | SS.FRAGMENT;
@@ -137,6 +145,10 @@ const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((
   for (let i = 0; i < 16; i++) { UBS[16 + i] = m[i]; UB[16 + i] = m[i]; }
   for (let i = 0; i < 3; i++) { UB[48 + i] = UBS[48 + i] = SUN[i]; }
   UBS[32] = 0; UBS[33] = -20; UBS[34] = 0; UBS[35] = 0; UBS[58] = 1;
+  // the piece's look (wc ... gl in struct G): night dims every light but the living ones
+  const pl = PIECE.pal, dp = PIECE.dep, lt = 1 - 0.88 * (1 - DAY), c3 = (o, k) => [pl[o] * k, pl[o + 1] * k, pl[o + 2] * k];
+  UB.set([...c3(0, lt), dp[0], ...c3(3, lt), dp[1], ...c3(6, dp[2] * lt), pl[21] * dp[5] * (3.5 - 2.5 * DAY), ...c3(9, lt), lt, ...c3(12, 1), PIECE.gs, ...c3(15, 1), 0, ...c3(18, 1), +PIECE.trench], 60);
+  UBS.set(UB.subarray(60), 60);
   Q.writeBuffer(uboS, 0, UBS);
 }
 
@@ -147,12 +159,14 @@ keep('abyssalLoad', 1);
 addEventListener('pagehide', () => keep('abyssalLoad', ''));
 let D;
 {
+  if (PIECE.trench) HOLES.push([-30, -49.5, 90, 5, 40, -49.5, 90]); // the glowing trench: a cut across the purple grotto
   const prims = primBuffer();
   const m = mod(W_DENS), p = device.createComputePipeline({ layout: 'auto', compute: { module: m, entryPoint: 'main' } });
   const size = NX * NY * NZ * 4;
-  const u = new ArrayBuffer(48), uu = new Uint32Array(u), uf = new Float32Array(u);
+  const u = new ArrayBuffer(80), uu = new Uint32Array(u), uf = new Float32Array(u);
   uu[0] = NX; uu[1] = NY; uu[2] = NZ; uf[4] = OX; uf[5] = OY; uf[6] = OZ; uf[7] = VS;
   uu[8] = MESAS.length; uu[9] = ARCHES.length; uu[10] = HOLES.length; uu[11] = CLEARS.length;
+  uf[12] = PIECE.ox; uf[14] = PIECE.oz; uf.set(PIECE.ter, 16);
   const bu = buf(new Uint8Array(u), BU.UNIFORM), bp = buf(prims, BU.STORAGE);
   const bd = device.createBuffer({ size, usage: BU.STORAGE | BU.COPY_SRC }), br = device.createBuffer({ size, usage: BU.MAP_READ | BU.COPY_DST });
   const bg = device.createBindGroup({ layout: p.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: bu } }, { binding: 1, resource: { buffer: bd } }, { binding: 2, resource: { buffer: bp } }] });
@@ -390,7 +404,8 @@ if (hasTS) {
 // ---------------------------------------------------------------- frame
 let hud = false;
 let kf = 0, kb = 0, kl = 0, kr = 0, ku = 0, kd = 0, ks = 0, mdx = 0, mdy = 0, lkx = 0, lky = 0, l2x = 0, l2y = 0, hN = 0, hMax = 0, hMin = 1e9, hPer = 1e9, hLate = 0, hTot = 0, tId = -1, tN = 0, tx0 = 0, ty0 = 0, tx = 0, ty = 0;
-const TANH = 0.6, NEAR = 0.1, EXPO = 0.62, RAYS = 0.54;
+// exposure and light shaft strength follow the depth band; night opens the exposure a little
+const TANH = 0.6, NEAR = 0.1, EXPO = 0.62 * PIECE.dep[4] * (1 + 0.6 * (1 - DAY)), RAYS = 0.54 * PIECE.dep[3];
 const submitList = [null];
 const rowOrd = new Uint8Array(CELLS);
 // Draws the cells of a cell-sorted buffer that are in view and within [minD, maxD) (scaled by `det`, but not for the
@@ -595,10 +610,15 @@ const key = (e, v) => {
 // behind the menu only the stats and mute keys work
 addEventListener('keydown', (e) => { if (menu && e.code !== 'KeyH' && e.code !== 'KeyM') return; sound(); key(e, 1); });
 addEventListener('keyup', (e) => key(e, 0));
-const release = () => { kf = kb = kl = kr = ku = kd = ks = 0; tId = -1; tN = 0; };
-const capture = () => { sound(); const p = canvas.requestPointerLock({ unadjustedMovement: true }); if (p && p.catch) p.catch(() => canvas.requestPointerLock()).catch(() => 0); };
+let drag = 0;
+const release = () => { kf = kb = kl = kr = ku = kd = ks = drag = 0; tId = -1; tN = 0; };
+// Mouse look: drag with a button held. Clicking also asks for pointer lock (free look without dragging) where the page
+// may have it; a sandboxed frame (ordinals.com previews) refuses, and dragging keeps working there.
+const capture = () => { sound(); try { const p = canvas.requestPointerLock({ unadjustedMovement: true }); if (p && p.catch) p.catch(() => canvas.requestPointerLock()).catch(() => 0); } catch {} };
 canvas.addEventListener('click', capture);
-addEventListener('mousemove', (e) => { if (document.pointerLockElement === canvas) { mdx += e.movementX; mdy += e.movementY; } });
+canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') drag = 1; });
+addEventListener('pointerup', () => { drag = 0; });
+addEventListener('mousemove', (e) => { if (drag || document.pointerLockElement === canvas) { mdx += e.movementX; mdy += e.movementY; } });
 addEventListener('blur', release);
 const touch = (e) => {
   e.preventDefault(); sound(); tN = e.touches.length;
