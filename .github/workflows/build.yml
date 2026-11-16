@@ -22,3 +22,5 @@ jobs:
         run: node collection/make-children.mjs
       - name: Traits (params.js and chain.js load in Node)
         run: node collection/traits.mjs --simulate
+      - name: Checks (chain fallbacks, genesis traits, child with a real id, no sandbox-blocked APIs)
+        run: node collection/check.mjs

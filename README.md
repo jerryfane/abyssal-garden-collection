@@ -29,8 +29,9 @@ copyright notice in an HTML comment and in its footer.
 - **Day and night**: the light follows the UTC hour of the latest block (`/r/blocktime`): day about 10:00 to 16:00,
   dusk and dawn ramps, night about 20:00 to 06:00 with dimmed sunlight and glowing kelp, ground cover and coral.
 - **Fallbacks**: every request gives up after 3 seconds; with no chain the piece still starts, seeded from its number,
-  fully grown, at midday. Without WebGPU it shows a card instead of the scene. Drag to look around (no pointer lock,
-  so it works inside ordinals.com's sandboxed preview).
+  fully grown, at midday. Without WebGPU it shows a card instead of the scene. Drag to look around. The page uses no
+  pointer lock and no web storage, so it works inside ordinals.com's sandboxed preview; a piece opens straight on its
+  scene (the genesis garden on its menu).
 
 The code for this lives in [`source/src/chain.js`](source/src/chain.js) (seed, growth, hour) and
 [`source/src/params.js`](source/src/params.js) (traits).
@@ -42,15 +43,17 @@ it, not exactly (run `node collection/traits.mjs --simulate`).
 
 | Trait | Values (weight %) | What it changes |
 |---|---|---|
-| Palette | Lagoon 20, Emerald 17, Twilight 16, Amber 14, Glacier 13, Coral Bloom 10, Rose Gold 6, **Obsidian 4** | Water, sunlight, kelp, coral and glow colours |
+| Palette | Lagoon 20, Emerald 17, Twilight 16, Amber 14, Glacier 13, Coral Bloom 10, Rose Gold 6, **Obsidian 4** | Colour of the water, haze, light shafts, sky, kelp, coral and glow: teal, deep green, violet, gold, pale ice, pink, rose, near-black with neon life |
 | Depth | Shallows 30, Midwater 45, Abyss 25 | Fog, light falloff, light shafts, bioluminescence |
-| Terrain | Canyons 35, Highlands 25, Lowlands 25, Badlands 15 | Shape and roughness of the seabed |
+| Terrain | Canyons 35, Highlands 25, Lowlands 25, Badlands 15 | Shape and roughness of the seabed, height of the rock walls |
 | Kelp | Sparse 25, Lush 55, Overgrown 20 | Number of kelp columns (×0.5, ×1, ×1.4) |
+| Landmark | Whale Fluke 35, Stone Arch 25, Monolith 20, Open Sand 20 | The set piece at the head of the main canyon |
 | Wreck | yes 15 | The sunken ship |
 | Glowing trench | **yes 5** | A trench across the purple grotto, lit by glowing veins and drifting motes |
 | Night | **yes 6** | Always night, whatever the block time |
 
-Every piece also gets its own stretch of seabed around the same landmarks.
+Every piece also gets its own stretch of seabed around the same hand-placed rocks, its own sun direction and light
+shaft strength, and its own starting viewpoint and heading.
 
 ## Costs
 
@@ -72,9 +75,10 @@ bytes / 4 + 340 vB; a child of N bytes is about N/4 + 290 vB. Not included: the 
 Needs Node 22.
 
 ```sh
-cd source && npm ci && npm run build     # writes ../index.html, the engine
+(cd source && npm ci && npm run build)   # writes index.html, the engine
 node collection/check-size.mjs           # engine Brotli size, fails over 40,000 B
 node collection/make-children.mjs        # collection/children/: 333 children, parent.html, ordstudio.json
+node collection/check.mjs                # params/chain fallbacks, child size with a real parent id, no blocked APIs
 node collection/serve.mjs                # then open http://localhost:8787/gallery.html
 ```
 

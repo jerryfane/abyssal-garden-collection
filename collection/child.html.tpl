@@ -1,1 +1,1 @@
-<!doctype html><script>AG={{AG}}</script><script>fetch('/content/{{PARENT}}').then(r=>r.text()).then(h=>{document.open();document.write(h);document.close()})</script>
+<!doctype html><script>AG={{AG}}</script><script>fetch('/content/{{PARENT}}',{signal:AbortSignal.timeout(1e4)}).then(r=>r.ok?r.text():0()).then(h=>{with(document)open(),write(h),close()}).catch(_=>document.write('Load failed'))</script>

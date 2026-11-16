@@ -7,6 +7,6 @@ export const ID = /^[0-9a-f]{64}i\d+$/;
 
 const tpl = readFileSync(new URL('child.html.tpl', import.meta.url), 'utf8');
 
-// The child HTML for piece n. `ag` is the config object literal the engine reads as globalThis.AG.
-export const child = (n, parent, ag = `{n:${n}}`) =>
-  tpl.replace('{{AG}}', () => ag).replace('{{PARENT}}', () => parent);
+// The child HTML for piece n: sets AG = {n} (the engine reads it as globalThis.AG) and loads the parent, giving up
+// with a one-line message after 10 s or on an error.
+export const child = (n, parent) => tpl.replace('{{AG}}', `{n:${n}}`).replace('{{PARENT}}', () => parent);

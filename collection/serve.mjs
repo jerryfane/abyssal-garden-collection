@@ -28,11 +28,11 @@ const blockTime = () => {
   d.setUTCHours(+hour, 0, 0, 0);
   return d.getTime() / 1000;
 };
-// everything the gallery labels a piece with; s is the seed the chain path computes, passed as AG.s too
+// everything the gallery labels a piece with: the seed and growth the engine ends up with (CHAIN=off: its fallbacks)
 const piece = (n) => {
-  const height = mintHeight(n), hash = blockHash(height), s = seedFrom(hash, n), p = params(s);
+  const height = mintHeight(n), hash = blockHash(height), s = seedFrom(chainOff ? '' : hash, n), p = params(s);
   const traits = Object.fromEntries(Object.keys(TRAITS).map((k) => [k, p[k]]));
-  return { n, id: childId(n), height, hash, s, grow: Math.min(1, (TIP - height) / 52560), traits };
+  return { n, id: childId(n), height, hash, s, grow: chainOff ? 1 : Math.min(1, (TIP - height) / 52560), traits };
 };
 const inscription = (id, n) => ({
   charms: [], content_type: 'text/html;charset=utf-8', content_length: null, delegate: null, fee: 0,
@@ -40,14 +40,15 @@ const inscription = (id, n) => ({
   sat: null, satpoint: `${id.slice(0, 64)}:0:0`, timestamp: 1790000000, value: 546,
 });
 
-// ord serves /content with this CSP and every route with Access-Control-Allow-Origin: *
-const CSP = "default-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob:";
+// ord serves every route with Access-Control-Allow-Origin: * and /content, when run with --csp-origin (as
+// ordinals.com is), with this CSP naming its own origin: an opaque-origin sandboxed frame has no 'self' to match
+const csp = (o) => `default-src ${o}/content/ ${o}/blockheight ${o}/blockhash ${o}/blockhash/ ${o}/blocktime ${o}/r/ 'unsafe-eval' 'unsafe-inline' data: blob:`;
 const send = (res, status, body, type, extra = {}) => {
   res.writeHead(status, { 'content-type': type, 'access-control-allow-origin': '*', 'cache-control': 'no-store', ...extra });
   res.end(body);
 };
 const json = (res, v) => send(res, 200, JSON.stringify(v), 'application/json');
-const html = (res, body) => send(res, 200, body, 'text/html;charset=utf-8', { 'content-security-policy': CSP });
+const html = (req, res, body) => send(res, 200, body, 'text/html;charset=utf-8', { 'content-security-policy': csp(`http://${req.headers.host}`) });
 
 createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -62,9 +63,9 @@ createServer((req, res) => {
   }
   if ((m = p.match(/^\/content\/(.+)$/))) {
     // the engine is read on every request, so a rebuild shows up on reload
-    if (m[1] === PARENT || m[1] === 'local:parent') return html(res, readFileSync(new URL('../index.html', import.meta.url)));
+    if (m[1] === PARENT || m[1] === 'local:parent') return html(req, res, readFileSync(new URL('../index.html', import.meta.url)));
     const n = byId.get(m[1]);
-    if (n !== undefined) return html(res, child(n, PARENT, `{n:${n},s:${piece(n).s}}`));
+    if (n !== undefined) return html(req, res, child(n, PARENT)); // the child as inscribed
   }
   if (p.startsWith('/r/') && !chainOff) {
     if ((m = p.match(/^\/r\/inscription\/(.+)$/)) && (byId.has(m[1]) || m[1] === PARENT)) return json(res, inscription(m[1], byId.get(m[1])));
