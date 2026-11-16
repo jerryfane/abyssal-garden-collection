@@ -1,106 +1,102 @@
-# Abyssal Garden
+# Abyssal Garden: the collection
 
-**A dreamy underwater world you can swim through, right in your browser.**
+**333 underwater gardens on Bitcoin, all grown from one on-chain engine.**
 
-Towering kelp forests, sunbeams pouring through a rippling surface, a sunken ship, manta rays gliding overhead.
-And all of it is made by code: no images, no 3D models, no sound files. The whole world fits in **one 96 KB HTML file**.
+This is a generative ordinals collection built on [Abyssal Garden](https://github.com/Noniv/abyssal-garden) by
+**Noniv** (Maksymilian Dendura): a WebGPU underwater world, kelp forests, light rays, a sunken ship, manta rays,
+made entirely by code in one HTML file. The original is MIT-licensed, Copyright (c) 2026 Maksymilian Dendura; this
+repository keeps that [LICENSE](LICENSE) and adds the collection changes by Jerry. Every built page carries the
+copyright notice in an HTML comment and in its footer.
 
 ![Kelp forest with a stone whale tail and a manta ray](.github/screenshots/whale-fluke.jpg)
 
-## Try it
-
-1. Download [`index.html`](index.html).
-2. Open it in **Chrome** or **Edge** on a desktop computer.
-3. Wait a few seconds while the world is built, then press **Dive in** and start swimming.
-
-Nothing to install, and it works offline. It needs a browser with **WebGPU**. If you see *"This scene needs WebGPU"*, update your browser or switch to Chrome / Edge.
-
-## What's down there
-
-- **Kelp forests** that sway in the current and sparkle with tiny gold and green specks
-- **Light rays** streaming down from a wavy surface, with shimmering caustics on the sea floor
-- **A sunken wooden ship**, a **giant stone whale tail**, rock arches, canyons and floating boulders
-- **Manta rays**, schools of fish, rising bubbles and drifting particles
-- **A purple grotto** with glowing magenta ground cover, coral and barrel sponges
-- **A soundscape** made up as you listen: a deep rumble, distant whale calls, soft chimes and bubbles
-
-| | |
-|---|---|
-| ![Shipwreck](.github/screenshots/shipwreck.jpg) | ![Looking up through the kelp](.github/screenshots/kelp-forest.jpg) |
-| ![Barrel sponges](.github/screenshots/sponge-garden.jpg) | ![Light rays over the kelp basin](.github/screenshots/light-rays.jpg) |
-
-![The purple grotto](.github/screenshots/purple-grotto.jpg)
-
-## Controls
-
-| | Keyboard & mouse |
-|---|---|
-| Look around | Move the mouse |
-| Swim | `W` `A` `S` `D` |
-| Up / down | `E` / `Q` |
-| Swim faster | Hold `Shift` |
-| Jump to a viewpoint | `1` to `6` (the spots in the screenshots) |
-| Menu | `Esc` releases the mouse and opens the menu with the list of controls; **Resume** takes you back |
-| Sound on / off | `M` (sound starts when you dive in) |
-| Performance stats | `H` |
-| Detail level | **Low**, **Medium** or **High** in the menu (reloads the page) |
-
-The seabed, cliffs and arches are solid: you glide along the rock instead of swimming into it, and you still fit through every tunnel and arch. Kelp, plants, corals, sponges, loose rocks, the floating boulders, the ship and the whale tail you can swim through.
-
-**On a touchscreen:** hold one finger down to swim forward and slide it to steer. Put a second finger down to go faster. The `≡` button in the corner opens the menu. Phones always show the scene in landscape and start on Low or Medium detail. (Touch support is experimental.)
-
-## Detail levels
-
-The **Low**, **Medium** and **High** buttons in the menu pick the detail level; the current one is lit. Each level is the same world, built with less in it:
-
-| Level | What it is | Picked on a first visit for |
-|---|---|---|
-| **High** | The full scene | Computers |
-| **Medium** | Half of the leaves, sparkles and pebbles; small rocks, sponges and corals cast no shadows | Phones with 8 GB of memory |
-| **Low** | A quarter of the leaves, no anti-aliasing, coarser rocks and corals, simpler lighting, 480p to start with | Other phones, and computers with 4 GB of memory or less |
-
-If loading crashes the tab, or the graphics driver gives up, the page starts again one level lower. Your browser remembers the level, and the resolution and draw distance the scene settled on, for the next visit.
-
 ## How it works
 
-- The seabed is sculpted on your graphics card every time the page opens, then decorated with about two million kelp leaves and plants, tens of thousands of rocks, and thousands of sponges, corals and fish.
-- Everything is drawn with **WebGPU** directly. No game engine or 3D library is used.
-- The ship, whale tail, mantas, fish and corals are built from simple mathematical shapes.
-- The sound is synthesized live with the Web Audio API.
-- It's built to run smoothly: about 180 fps at 2560×1440 on an RTX 5070 Ti. On slower hardware it aims for 60 fps by lowering first the resolution and then how far away plants and rocks are drawn, in small steps. The scene is already running, blurred, behind the start menu, so most of that tuning is done before you dive in. A low-end phone (Samsung Galaxy A16) reaches about 20 fps at 670×372 on Low.
+- **Parent**: the engine, [`index.html`](index.html), inscribed once (Brotli-compressed). Opened on its own it shows
+  the original garden.
+- **Children**: 333 tiny HTML inscriptions (~223 bytes each), children of the parent. Each one only says which piece it
+  is and loads the parent:
 
-## Make it your own
+  ```html
+  <!doctype html><script>AG={n:42}</script><script>fetch('/content/<PARENT_ID>').then(r=>r.text()).then(h=>{document.open();document.write(h);document.close()})</script>
+  ```
 
-The readable source code is in the [`source`](source) folder. To change something and rebuild `index.html` you need [Node.js](https://nodejs.org) 18 or newer:
+- **Seed from the block**: the engine reads its own inscription id from the address, asks ord's recursive endpoints for
+  the block the piece was inscribed in (`/r/inscription/<id>` then `/r/blockhash/<height>`) and mixes that block hash
+  with the piece number. Nobody, including the creator, knows a piece's look before it is inscribed.
+- **Growth**: kelp height, kelp columns and fish per school grow from half to full over the first year (52,560
+  blocks) after inscription (`/r/blockheight`).
+- **Day and night**: the light follows the UTC hour of the latest block (`/r/blocktime`): day about 10:00 to 16:00,
+  dusk and dawn ramps, night about 20:00 to 06:00 with dimmed sunlight and glowing kelp, ground cover and coral.
+- **Fallbacks**: every request gives up after 3 seconds; with no chain the piece still starts, seeded from its number,
+  fully grown, at midday. Without WebGPU it shows a card instead of the scene. Drag to look around (no pointer lock,
+  so it works inside ordinals.com's sandboxed preview).
 
-```bash
-cd source
-npm install
-npm run build
+The code for this lives in [`source/src/chain.js`](source/src/chain.js) (seed, growth, hour) and
+[`source/src/params.js`](source/src/params.js) (traits).
+
+## Traits
+
+Each piece draws one value per trait from its seed. Weights are the share the draw aims for; 333 pieces land close to
+it, not exactly (run `node collection/traits.mjs --simulate`).
+
+| Trait | Values (weight %) | What it changes |
+|---|---|---|
+| Palette | Lagoon 20, Emerald 17, Twilight 16, Amber 14, Glacier 13, Coral Bloom 10, Rose Gold 6, **Obsidian 4** | Water, sunlight, kelp, coral and glow colours |
+| Depth | Shallows 30, Midwater 45, Abyss 25 | Fog, light falloff, light shafts, bioluminescence |
+| Terrain | Canyons 35, Highlands 25, Lowlands 25, Badlands 15 | Shape and roughness of the seabed |
+| Kelp | Sparse 25, Lush 55, Overgrown 20 | Number of kelp columns (×0.5, ×1, ×1.4) |
+| Wreck | yes 15 | The sunken ship |
+| Glowing trench | **yes 5** | A trench across the purple grotto, lit by glowing veins and drifting motes |
+| Night | **yes 6** | Always night, whatever the block time |
+
+Every piece also gets its own stretch of seabed around the same landmarks.
+
+## Costs
+
+Estimates only: the real figure depends on the wallet and the batch. See ordstudio's Plan for exact numbers.
+
+| | Size | vB | 1 sat/vB | 2 sat/vB | 5 sat/vB |
+|---|---|---|---|---|---|
+| Parent (engine) | 99.5 KB, 34.9 KB Brotli | 9,076 | 9,076 | 18,152 | 45,380 |
+| One child | 223 B | ~346 | 346 | 692 | 1,730 |
+| 333 children | | ~115,218 | 115,218 | 230,436 | 576,090 |
+| **Total** | | **~124,294** | **124,294** | **248,588** | **621,470** |
+
+The parent figure was measured; a child of N bytes is about N/4 + 290 vB. Not included: the postage each inscription
+keeps (usually 330 to 546 sats) and any service fee.
+
+## Build and run locally
+
+Needs Node 22.
+
+```sh
+cd source && npm ci && npm run build     # writes ../index.html, the engine
+node collection/check-size.mjs           # engine Brotli size, fails over 40,000 B
+node collection/make-children.mjs        # collection/children/: 333 children, parent.html, ordstudio.json
+node collection/serve.mjs                # then open http://localhost:8787/gallery.html
 ```
 
-This writes a new `index.html` next to this README. `npm run build:readable` writes an unminified version instead, which is easier to debug in the browser's developer tools.
+- **Gallery**: `serve.mjs` fakes ord's `/content` and `/r/` routes with made-up block hashes, so 12 pieces run their
+  real chain path side by side, each in a sandboxed frame like on ordinals.com. `?n=0,7,42` picks pieces;
+  `HOUR=22 node collection/serve.mjs` fixes the hour, `CHAIN=off` tests the fallbacks.
+- **ordstudio**: drop the `collection/children/` folder into ordstudio. In Local mode the children load
+  `/content/local:parent`. Once the parent is inscribed, run `node collection/make-children.mjs <PARENT_ID>` and
+  inscribe the children with `--parent <PARENT_ID>`.
+- **Traits**: `node collection/traits.mjs hashes.json` (`{"<n>": "<block hash>"}`) writes the trait table to
+  `collection/out/traits.csv` and `.json` and prints a rarity summary; `--simulate` uses made-up hashes.
+- `npm run build:dev` writes `dev.html` with the original's fly-through (`F`) and benchmark (`B`) tools.
 
-`npm run build:dev` writes a separate `dev.html` with two extra tools that are not part of `index.html`: `F` flies the camera along a one-minute path through the whole world, and `B` runs that flight as a benchmark and reports frame and GPU times.
+CI ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds on every push and fails if the engine is over
+40,000 B Brotli or any child over 300 B. It uses GitHub-hosted runners, so it only runs if Actions is enabled for the
+account.
 
-| File | What's inside |
-|---|---|
-| [`source/src/world.js`](source/src/world.js) | The world layout: rock walls, arches, tunnels, kelp forests, sponge gardens, fish schools, mantas, the ship and the whale tail. **A good place to start.** |
-| [`source/src/shaders.js`](source/src/shaders.js) | The look: water and fog colors, lighting, kelp, rocks, the water surface and light rays (WGSL shader code) |
-| [`source/src/main.js`](source/src/main.js) | The renderer, the camera, the controls, the six viewpoints and the camera path the world is laid out around |
-| [`source/src/audio.js`](source/src/audio.js) | The soundscape |
-| [`source/src/quality.js`](source/src/quality.js) | The detail levels: which one a device starts on, and what is remembered between visits |
-| [`source/src/math.js`](source/src/math.js) | Noise, random numbers and mesh-building helpers |
-| [`source/src/dev.js`](source/src/dev.js) | Development tools (fly-through and benchmark), only in `dev.html` |
-| [`source/template.html`](source/template.html) | The page around the scene: loading bar, start menu, links and their styles |
+## WebGPU
 
-Some easy first tweaks:
-
-- **Water color:** `WCOL` (blue-green water) and `PCOL` (purple grotto) near the top of the shared scene code in `shaders.js`
-- **Sunlight color:** `SUNC` right next to them
-- **Brightness and light rays:** `EXPO` and `RAYS` in `main.js`
-- **Swimming speed:** search for `26 : 7` in `main.js` (fast speed : normal speed)
+The scene needs WebGPU, best in Chrome or Edge on a desktop computer. Without it the piece shows a card instead of the
+scene. Wallets and marketplaces that preview inscriptions in their own viewers may not offer WebGPU.
 
 ## License
 
-[MIT](LICENSE): free to use, change and share, including in your own projects.
+[MIT](LICENSE). Original world Copyright (c) 2026 Maksymilian Dendura ([Noniv/abyssal-garden](https://github.com/Noniv/abyssal-garden));
+collection changes by Jerry.

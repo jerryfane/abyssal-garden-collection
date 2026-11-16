@@ -1,0 +1,24 @@
+# Builds the engine and checks the on-chain budgets: engine ≤ 40,000 B Brotli, every child ≤ 300 B.
+# Runs on GitHub-hosted runners; if Actions billing is blocked on the account, the job will not start.
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - run: npm ci
+        working-directory: source
+      - run: npm run build
+        working-directory: source
+      - name: Engine size (Brotli, as ord --compress)
+        run: node collection/check-size.mjs
+      - name: Children (each ≤ 300 B, also with a real parent id)
+        run: node collection/make-children.mjs
+      - name: Traits (params.js and chain.js load in Node)
+        run: node collection/traits.mjs --simulate
