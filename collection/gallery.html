@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>Abyssal Garden: gallery (local)</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<link rel=icon href="data:,">
+<style>
+  body { margin: 0; padding: 12px; background: #03131c; color: #cfeef5; font: 13px/1.4 system-ui, sans-serif; }
+  h1 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+  h1 span { color: #6f98a3; font-weight: 400; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  figure { margin: 0; }
+  iframe { display: block; width: 100%; aspect-ratio: 16 / 10; border: 0; border-radius: 4px; background: #000; }
+  figcaption { padding: 4px 2px; color: #8fb9c4; }
+  figcaption b { color: #e8fbff; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<h1>Abyssal Garden <span>local gallery: fake chain from serve.mjs, every frame sandboxed like ordinals.com (<code>?n=0,5,7</code> picks pieces)</span></h1>
+<main id=g></main>
+<script>
+// Each frame loads a child from /content/<made-up id>: the child sets AG={n,s} and loads the engine from
+// /content/<parent>, which then asks the fake /r/ routes for its block. Frames start one after another so twelve
+// world builds don't all compete for the first seconds.
+const fmt = (t) => Object.entries(t).map(([k, v]) => v === true ? k : v).filter(Boolean).join(' · ');
+fetch('/gallery.json' + location.search).then((r) => r.json()).then((pieces) => {
+  pieces.forEach((p, i) => {
+    const f = document.createElement('figure');
+    f.innerHTML = `<iframe sandbox=allow-scripts title="Abyssal Garden #${p.n + 1}"></iframe>` +
+      `<figcaption><b><a href="/content/${p.id}" target=_blank>#${p.n + 1}</a></b> ${fmt(p.traits)}<br>` +
+      `block ${p.height} · growth ${p.grow.toFixed(2)} · seed ${p.s}</figcaption>`;
+    g.append(f);
+    setTimeout(() => (f.firstChild.src = `/content/${p.id}`), i * 400);
+  });
+});
+</script>
+</body>
+</html>

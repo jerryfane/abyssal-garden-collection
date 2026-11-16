@@ -15,10 +15,19 @@ const say = (m, to, ms) => {
   // go on once the animation runs: one not started before the thread gets busy stays stuck (timer: hidden tabs)
   return new Promise((r) => { a.ready.then(() => setTimeout(r)); setTimeout(r, document.hidden ? 0 : 1e3); });
 };
-const fail = (m) => { throw new Error(m, { cause: 1 }); }; // cause marks a message that is shown as it is
-if (!navigator.gpu) fail('This scene needs WebGPU. Try a current Chrome or Edge.');
-const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-if (!adapter) fail('No WebGPU adapter found.');
+// the piece: a child inscription sets AG (chain.js reads its block); without AG this is the genesis garden
+const AG = globalThis.AG, ON = AG && await chain(AG), PIECE = AG ? params(ON.seed) : GENESIS;
+if (AG) _seed = RS = ON.seed | 0;
+PIECE.gs = AG ? 0.5 + 0.5 * clamp(ON.grow, 0, 1) : 1; // growth: kelp height, kelp and fish counts
+// daylight from the hour of the latest block: full day ~10-16 UTC, night ~20-6, dusk and dawn between
+const DAY = !AG ? 1 : PIECE.night ? 0 : clamp(0.5 + cos((ON.hour - 13) * PI / 12), 0, 1);
+const NAME = AG ? 'Abyssal Garden #' + ((AG.n | 0) + 1) : 'Abyssal Garden';
+const TRAITS_LINE = [PIECE.palette, PIECE.depth, PIECE.terrain, PIECE.kelp + ' kelp', PIECE.landmark, PIECE.wreck && 'Wreck', PIECE.trench && 'Glowing trench', PIECE.night && 'Night'].filter(Boolean).join(' · ');
+// a piece shows its name, traits and water colour from the first moment of loading
+if (AG) { document.title = NAME; $('t').textContent = '#' + ((AG.n | 0) + 1) + ' · ' + TRAITS_LINE; body.style.background = `radial-gradient(rgb(${PIECE.pal.slice(0, 3).map((c) => c * 90)}),rgb(${PIECE.pal.slice(0, 3).map((c) => c * 20)}) 70%)`; }
+// no WebGPU (or no adapter): a painted card of this piece instead of the dive
+const adapter = navigator.gpu && await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => 0);
+if (!adapter) return card();
 $('w').hidden = !!navigator.userAgentData; // only Chromium-based browsers have it
 const hasTS = adapter.features.has('timestamp-query');
 const device = await adapter.requestDevice({ requiredFeatures: hasTS ? ['timestamp-query'] : [] });
@@ -26,7 +35,7 @@ device.addEventListener('uncapturederror', (e) => console.error('GPU: ' + e.erro
 // out of memory or a GPU timeout: reload a level lower, or on Low say what happened
 device.lost.then((l) => {
   if (l.reason === 'destroyed') return; // the page is closing
-  if (LV < 2) { keep('abyssal', LV + 1); location.reload(); }
+  if (LV < 2) setLV(LV + 1);
   dead = body.className = 'l e'; $('s').textContent = 'The graphics device was lost. Reload the page to try again.';
 });
 const ctx = canvas.getContext('webgpu'), FMT = navigator.gpu.getPreferredCanvasFormat();
@@ -48,8 +57,8 @@ const tDetail = tex(1024, 1024, 'rgba8unorm', TU.RENDER_ATTACHMENT | TU.TEXTURE_
 const tVol = tex(NX / 2, NY / 2, 'rg8unorm', TU.TEXTURE_BINDING | TU.COPY_DST, { d: NZ / 2 });
 const tMap = tex(512, 512, 'rgba8unorm', TU.TEXTURE_BINDING | TU.COPY_DST);
 
-const UB = new Float32Array(60), UBS = new Float32Array(60);
-const ubo = device.createBuffer({ size: 240, usage: BU.UNIFORM | BU.COPY_DST }), uboS = device.createBuffer({ size: 240, usage: BU.UNIFORM | BU.COPY_DST });
+const UB = new Float32Array(104), UBS = new Float32Array(104);
+const ubo = device.createBuffer({ size: 416, usage: BU.UNIFORM | BU.COPY_DST }), uboS = device.createBuffer({ size: 416, usage: BU.UNIFORM | BU.COPY_DST });
 const WT = new Float32Array(4), uboW = device.createBuffer({ size: 16, usage: BU.UNIFORM | BU.COPY_DST });
 
 const VF = SS.VERTEX | SS.FRAGMENT;
@@ -125,11 +134,12 @@ const pRays = device.createRenderPipeline({ layout: 'auto', vertex: { module: mR
 const pPost = device.createRenderPipeline({ layout: 'auto', vertex: { module: mPost, entryPoint: 'vs' }, fragment: { module: mPost, entryPoint: 'fs', targets: [{ format: FMT }] } });
 
 // ---------------------------------------------------------------- sun + shadow matrix
-const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((c) => c / l); })();
+// the sun: high and a little slanted in the genesis garden, from anywhere and lower in the pieces
+const SUN = (() => { const v = PIECE.sun, l = hypot(...v); return v.map((c) => c / l); })();
 {
   const L = SUN, lr = [L[1], -L[0], 0], ll = hypot(...lr); lr[0] /= ll; lr[1] /= ll;
   const lu = [L[1] * lr[2] - L[2] * lr[1], L[2] * lr[0] - L[0] * lr[2], L[0] * lr[1] - L[1] * lr[0]];
-  const R = 225, d0 = -175, d1 = 125, m = UBS;
+  const R = 225, d0 = AG ? -230 : -175, d1 = AG ? 230 : 125, m = UBS;
   m[0] = lr[0] / R; m[4] = lr[1] / R; m[8] = lr[2] / R; m[12] = 0;
   m[1] = lu[0] / R; m[5] = lu[1] / R; m[9] = lu[2] / R; m[13] = 0;
   m[2] = -L[0] / (d1 - d0); m[6] = -L[1] / (d1 - d0); m[10] = -L[2] / (d1 - d0); m[14] = d1 / (d1 - d0);
@@ -137,22 +147,30 @@ const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((
   for (let i = 0; i < 16; i++) { UBS[16 + i] = m[i]; UB[16 + i] = m[i]; }
   for (let i = 0; i < 3; i++) { UB[48 + i] = UBS[48 + i] = SUN[i]; }
   UBS[32] = 0; UBS[33] = -20; UBS[34] = 0; UBS[35] = 0; UBS[58] = 1;
+  // the piece's look (wc ... gl in struct G): night dims every light but the living ones
+  const pl = PIECE.pal, dp = PIECE.dep, lt = 1 - 0.88 * (1 - DAY), c3 = (o, k) => [pl[o] * k, pl[o + 1] * k, pl[o + 2] * k];
+  UB.set([...c3(0, lt), dp[0], ...c3(3, lt), dp[1], ...c3(6, dp[2] * lt), pl[21] * dp[5] * (3.5 - 2.5 * DAY), ...c3(9, lt), lt, ...c3(12, 1), 0, ...c3(15, 1), 0, ...c3(18, 1), +PIECE.trench,
+    ...PIECE.kd, 0, ...PIECE.si, 0, ...PIECE.sky, 0, ...c3(22, 1), pl[25]], 60);
+  UBS.set(UB.subarray(60), 60);
   Q.writeBuffer(uboS, 0, UBS);
 }
 
 // ---------------------------------------------------------------- world generation
 await say('Sculpting the seabed…', 0.25, 1200);
-// marks a load in progress (quality.js); leaving the page before it ends is not a crash
-keep('abyssalLoad', 1);
-addEventListener('pagehide', () => keep('abyssalLoad', ''));
 let D;
 {
+  if (PIECE.trench) HOLES.push([-30, -49.5, 90, 5, 40, -49.5, 90]); // the glowing trench: a cut across the purple grotto
+  // the landmark at the head of the main canyon (the whale fluke is a mesh, world.js) and the height of the rock masses
+  if (PIECE.landmark === 'Stone Arch') ARCHES.push([-4, -47, -4, 2.3, 9, 2.2, 1.25]);
+  if (PIECE.landmark === 'Monolith') MESAS.push([-5, -4, -5, -4, 3.2, -19, 2, 1.5]);
+  if (AG) MESAS.forEach((m, i) => { if (i !== 9) m[5] = min(3, -45.5 + (m[5] + 45.5) * PIECE.ter[4]); }); // not the ship's supports
   const prims = primBuffer();
   const m = mod(W_DENS), p = device.createComputePipeline({ layout: 'auto', compute: { module: m, entryPoint: 'main' } });
   const size = NX * NY * NZ * 4;
-  const u = new ArrayBuffer(48), uu = new Uint32Array(u), uf = new Float32Array(u);
+  const u = new ArrayBuffer(80), uu = new Uint32Array(u), uf = new Float32Array(u);
   uu[0] = NX; uu[1] = NY; uu[2] = NZ; uf[4] = OX; uf[5] = OY; uf[6] = OZ; uf[7] = VS;
   uu[8] = MESAS.length; uu[9] = ARCHES.length; uu[10] = HOLES.length; uu[11] = CLEARS.length;
+  uf[12] = PIECE.ox; uf[14] = PIECE.oz; uf.set(PIECE.ter.slice(0, 4), 16);
   const bu = buf(new Uint8Array(u), BU.UNIFORM), bp = buf(prims, BU.STORAGE);
   const bd = device.createBuffer({ size, usage: BU.STORAGE | BU.COPY_SRC }), br = device.createBuffer({ size, usage: BU.MAP_READ | BU.COPY_DST });
   const bg = device.createBindGroup({ layout: p.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: bu } }, { binding: 1, resource: { buffer: bd } }, { binding: 2, resource: { buffer: bp } }] });
@@ -269,6 +287,18 @@ for (const p of POSES) flyPts.push([p[0], -40, p[2]]);
 await say('Growing kelp…', 0.73, 2500);
 const Wd = makeWorld(D, T, flyPts, POSES);
 for (const p of POSES) p[1] += Wd.gy(p[0], p[2]);
+// where the dive starts: viewpoint 1 in the genesis garden. A piece lines up the viewpoints and the points of the camera
+// path (lifted clear of the seabed) in an order from its seed, each turned by up to ±40°, and starts at the first with
+// open water ahead (below)
+const VC = [];
+if (AG) for (let i = 0; i < 31; i++) {
+  const k = (PIECE.view * 31 + i * 13) % 31 | 0, a = ((PIECE.view * 977 + i * 0.618) % 1 - 0.5) * 1.4;
+  const v = Array.from(k < 6 ? POSES[k] : FLY.subarray(k * 6 - 36, k * 6 - 30));
+  if (k > 5) v[1] = max(v[1], Wd.gy(v[0], v[2]) + 2);
+  const dx = v[3] - v[0], dz = v[5] - v[2];
+  v[3] = v[0] + dx * cos(a) - dz * sin(a); v[5] = v[2] + dx * sin(a) + dz * cos(a);
+  VC.push(v);
+}
 D = Wd.gy = T.smp = null; // with gy goes the generator's working memory (about 200 MB)
 
 await say('Building set pieces…', 0.94, 1200);
@@ -329,9 +359,9 @@ Wd.glints = Wd.volD = Wd.gm = T.vb = T.ib = T.wp = T.wn = 0;
 
 // ---------------------------------------------------------------- render targets (rebuilt on resize)
 // The scene is drawn at `pix` pixels and scaled up to the window. frame() tunes it and the draw distance scale `det`
-// for 60 fps; both start where the last visit left them.
+// for 60 fps, starting from full size (Low: a small fixed budget).
 const PIXMAX = 2560 * 1440, PIXMIN = mob ? 25e4 : 5e5, DETMIN = 0.4;
-let W = 0, H = 0, DW = 0, DH = 0, pix = +SV[1] || (LV > 1 ? 41e4 : mob ? 1280 * 720 : PIXMAX), det = +SV[2] || 1, dynN = 0, dynT = 0, dynG = 0, dynGN = 0, dynBad = 0, dynOk = 0, dynWait = 3;
+let W = 0, H = 0, DW = 0, DH = 0, pix = LV > 1 ? 41e4 : mob ? 1280 * 720 : PIXMAX, det = 1, dynN = 0, dynT = 0, dynG = 0, dynGN = 0, dynBad = 0, dynOk = 0, dynWait = 3;
 let passScene, passRays, passBlur, bgBlur, passPost, bgRays, bgPost, bloomPass = [], bloomBG = [], targets = [];
 const NB = 6;
 function resize() {
@@ -390,7 +420,8 @@ if (hasTS) {
 // ---------------------------------------------------------------- frame
 let hud = false;
 let kf = 0, kb = 0, kl = 0, kr = 0, ku = 0, kd = 0, ks = 0, mdx = 0, mdy = 0, lkx = 0, lky = 0, l2x = 0, l2y = 0, hN = 0, hMax = 0, hMin = 1e9, hPer = 1e9, hLate = 0, hTot = 0, tId = -1, tN = 0, tx0 = 0, ty0 = 0, tx = 0, ty = 0;
-const TANH = 0.6, NEAR = 0.1, EXPO = 0.62, RAYS = 0.54;
+// exposure and light shaft strength follow the depth band; night opens the exposure a little
+const TANH = 0.6, NEAR = 0.1, EXPO = 0.62 * PIECE.dep[4] * (1 + 0.6 * (1 - DAY)), RAYS = 0.54 * PIECE.dep[3] * PIECE.rays;
 const submitList = [null];
 const rowOrd = new Uint8Array(CELLS);
 // Draws the cells of a cell-sorted buffer that are in view and within [minD, maxD) (scaled by `det`, but not for the
@@ -541,13 +572,12 @@ function frame(now) {
     else if (a > 17.6) { dynOk = 0; if (++dynBad > 1) { k = 15 / a; dynBad = 0; dynWait = min(dynWait * 2, 60); } }
     // at the display's rate there is no telling if there is room, so try a little more now and then
     else { dynBad = 0; if (a < 12.5) k = 15 / a; else if (++dynOk > dynWait) { k = 1.17; dynOk = 0; } }
-    k = k < 0.5 ? 0.5 : k > 1.7 ? 1.7 : k; const top = min(PIXMAX, DW * DH), mid = max(top / 2, PIXMIN), was = pix + det;
+    k = k < 0.5 ? 0.5 : k > 1.7 ? 1.7 : k; const top = min(PIXMAX, DW * DH), mid = max(top / 2, PIXMIN);
     // too slow: pixels down to `mid` first, then draw distance, then the remaining pixels; faster goes back the same way
     if (k < 1 ? pix > mid || det <= DETMIN : pix < mid || det >= 1) {
       const end = k < 1 ? (det > DETMIN ? mid : PIXMIN) : det < 1 ? mid : top;
       pix *= k; if (k < 1 ? pix < end : pix > end) pix = end;
     } else { det *= sqrt(k); det = det < DETMIN ? DETMIN : det > 1 ? 1 : det; }
-    if (was !== pix + det) keep('abyssal', [LV, pix < top ? pix | 0 : '', det]); // nothing kept at full resolution
     dynN = dynT = dynG = dynGN = 0; resize();
   }
   F[TIME] += dt;
@@ -595,10 +625,15 @@ const key = (e, v) => {
 // behind the menu only the stats and mute keys work
 addEventListener('keydown', (e) => { if (menu && e.code !== 'KeyH' && e.code !== 'KeyM') return; sound(); key(e, 1); });
 addEventListener('keyup', (e) => key(e, 0));
-const release = () => { kf = kb = kl = kr = ku = kd = ks = 0; tId = -1; tN = 0; };
-const capture = () => { sound(); const p = canvas.requestPointerLock({ unadjustedMovement: true }); if (p && p.catch) p.catch(() => canvas.requestPointerLock()).catch(() => 0); };
-canvas.addEventListener('click', capture);
-addEventListener('mousemove', (e) => { if (document.pointerLockElement === canvas) { mdx += e.movementX; mdy += e.movementY; } });
+let drag = 0;
+const release = () => { kf = kb = kl = kr = ku = kd = ks = drag = 0; tId = -1; tN = 0; };
+// Mouse look: drag with a button held (no pointer lock: ordinals.com's sandboxed frames refuse it). The canvas captures
+// the pointer while dragging, and a move with no button down ends the drag too (a release outside the frame may never
+// reach it).
+canvas.addEventListener('click', sound);
+canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') { drag = 1; canvas.setPointerCapture(e.pointerId); } });
+for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(n, () => { drag = 0; });
+addEventListener('mousemove', (e) => { if (!e.buttons) drag = 0; if (drag) { mdx += e.movementX; mdy += e.movementY; } });
 addEventListener('blur', release);
 const touch = (e) => {
   e.preventDefault(); sound(); tN = e.touches.length;
@@ -614,12 +649,12 @@ const touch = (e) => {
 for (const n of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) canvas.addEventListener(n, touch, { passive: false });
 
 // ---------------------------------------------------------------- menu
-// The scene keeps rendering (blurred by CSS) behind the menu. Esc, losing the mouse or the corner button open it.
+// The scene keeps rendering (blurred by CSS) behind the menu. Esc or the corner button open it.
 let menu = true;
 const bDive = $('d');
 const ui = (m) => {
   if (dead) return;
-  menu = m; body.className = m ? 'm' : document.pointerLockElement ? 'g p' : 'g';
+  menu = m; body.className = m ? 'm' : 'g';
   // focus the dive button so Enter works (delayed: it can't take focus while still hidden)
   if (m) { release(); setTimeout(() => menu && bDive.focus(), 100); } else document.activeElement.blur();
 };
@@ -627,17 +662,23 @@ const go = () => {
   sound(); ui(false); bDive.textContent = 'Resume';
   // phones: go fullscreen and ask for landscape; where that is refused the CSS rotation still applies
   if (mob) document.documentElement.requestFullscreen?.()?.then(() => screen.orientation.lock('landscape')).catch(() => 0);
-  if (!mob) capture();
 };
 bDive.onclick = go; $('o').onclick = () => ui(true);
 // detail buttons: the current level is lit, the others reload the page with theirs
-$('q').querySelectorAll('button').forEach((b, i) => { if (i === 2 - LV) b.className = 'on'; else b.onclick = () => { keep('abyssal', 2 - i); location.reload(); }; });
-document.addEventListener('pointerlockchange', () => ui(!document.pointerLockElement));
+$('q').querySelectorAll('button').forEach((b, i) => { if (i === 2 - LV) b.className = 'on'; else b.onclick = () => setLV(2 - i); });
 
 // draw the first frame and wait for the GPU to finish it (pipelines get compiled on first use) before the reveal
-lookAt(...POSES[0]);
+// no rock within 18 m along the view (sd() reads the collision field)
+const open = (v) => {
+  const dx = v[3] - v[0], dy = v[4] - v[1], dz = v[5] - v[2], l = hypot(dx, dy, dz);
+  for (let t = 1; t < 18; t++) { F[CX] = v[0] + dx / l * t; F[CY] = v[1] + dy / l * t; F[CZ] = v[2] + dz / l * t; sd(0); if (CS[0] > -0.6) return false; }
+  return true;
+};
+lookAt(...(AG ? VC.find(open) || VC[0] : POSES[0]));
+if (AG) collide(); // out of any rock the piece's seabed put around the start
 await say('Letting the light in…', 1, 400);
 render(); await Q.onSubmittedWorkDone();
-setTimeout(keep, 15e3, 'abyssalLoad', ''); // the load counts as survived after 15 s of frames
-ui(true);
+// the genesis garden opens on its menu; a piece opens on its scene, so a preview or thumbnail shows the piece itself
+ui(!AG);
+if (AG) bDive.textContent = 'Resume';
 requestAnimationFrame((t) => { F[LAST] = t; requestAnimationFrame(frame); });
