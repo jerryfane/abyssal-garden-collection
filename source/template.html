@@ -79,7 +79,8 @@ p { margin: 0; }
 #j p, #s { font: 600 .8em/1.4 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
 #j p { color: #e8fbffa8; }
 #j p::before, #s::before { content: attr(data-n); margin-right: .8em; color: var(--g); }
-.e #x, .e #j, .e #s::before { display: none; }
+/* failed to start: only the message stays */
+.e #x, .e #j, .e #y, .e #s::before { display: none; }
 .e #s { font: 700 1.1em/1.4 system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
 @media (prefers-reduced-motion: reduce) { #r i { animation: none; } }
 
