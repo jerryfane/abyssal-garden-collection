@@ -147,7 +147,7 @@ const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((
   UBS[32] = 0; UBS[33] = -20; UBS[34] = 0; UBS[35] = 0; UBS[58] = 1;
   // the piece's look (wc ... gl in struct G): night dims every light but the living ones
   const pl = PIECE.pal, dp = PIECE.dep, lt = 1 - 0.88 * (1 - DAY), c3 = (o, k) => [pl[o] * k, pl[o + 1] * k, pl[o + 2] * k];
-  UB.set([...c3(0, lt), dp[0], ...c3(3, lt), dp[1], ...c3(6, dp[2] * lt), pl[21] * dp[5] * (3.5 - 2.5 * DAY), ...c3(9, lt), lt, ...c3(12, 1), PIECE.gs, ...c3(15, 1), 0, ...c3(18, 1), +PIECE.trench], 60);
+  UB.set([...c3(0, lt), dp[0], ...c3(3, lt), dp[1], ...c3(6, dp[2] * lt), pl[21] * dp[5] * (3.5 - 2.5 * DAY), ...c3(9, lt), lt, ...c3(12, 1), 0, ...c3(15, 1), 0, ...c3(18, 1), +PIECE.trench], 60);
   UBS.set(UB.subarray(60), 60);
   Q.writeBuffer(uboS, 0, UBS);
 }

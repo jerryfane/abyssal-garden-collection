@@ -193,8 +193,8 @@ const WK = array<vec3f, 10>(vec3f(1., 2., 1.), vec3f(-2., 1., .9), vec3f(3., 1.,
 // ---------------------------------------------------------------- shared scene code
 const S_G = /*wgsl*/`
 // the piece (main.js fills them from params.js): wc water colour + fog density scale, pc water colour in the purple
-// zone + light falloff scale, sc sunlight + bioluminescence, am ambient + daylight, kt kelp tint + growth, ct coral
-// tint, gl trench glow + trench on/off
+// zone + light falloff scale, sc sunlight + bioluminescence, am ambient + daylight, kt kelp tint, ct coral tint,
+// gl trench glow + trench on/off
 struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f,
   wc: vec4f, pc: vec4f, sc: vec4f, am: vec4f, kt: vec4f, ct: vec4f, gl: vec4f };
 const SIG0 = vec3f(.058, .0235, .0195);
