@@ -24,9 +24,10 @@ if (opt.simulate) {
   const sim = (n) => '0'.repeat(19) + createHash('sha256').update(`${opt.rng}:${n}`).digest('hex').slice(0, 45);
   hashes = Array.from({ length: +opt.count }, (_, n) => [n, sim(n)]);
 } else if (positionals[0]) {
-  hashes = Object.entries(JSON.parse(readFileSync(positionals[0], 'utf8'))).map(([n, h]) => [+n, h]);
-  const bad = hashes.find(([n, h]) => !(Number.isInteger(n) && n >= 0 && /^[0-9a-f]{64}$/.test(h)));
-  if (bad) throw new Error(`bad entry ${JSON.stringify(bad)}: expected {"<n>": "<64 hex block hash>"}`);
+  hashes = Object.entries(JSON.parse(readFileSync(positionals[0], 'utf8')));
+  const bad = hashes.find(([n, h]) => !(/^\d+$/.test(n) && /^[0-9a-f]{64}$/.test(h)));
+  if (bad) throw new Error(`bad entry "${bad[0]}": ${JSON.stringify(bad[1])}; expected {"<n>": "<64 hex block hash>"}`);
+  hashes = hashes.map(([n, h]) => [+n, h]);
 } else {
   console.error('usage: node collection/traits.mjs <hashes.json> | --simulate [--count N] [--rng TEXT] [--csv | --json]');
   process.exit(1);
