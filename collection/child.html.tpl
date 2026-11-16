@@ -1,0 +1,1 @@
+<!doctype html><script>AG={{AG}}</script><script>fetch('/content/{{PARENT}}').then(r=>r.text()).then(h=>{document.open();document.write(h);document.close()})</script>
