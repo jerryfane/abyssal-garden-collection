@@ -194,11 +194,10 @@ const WK = array<vec3f, 10>(vec3f(1., 2., 1.), vec3f(-2., 1., .9), vec3f(3., 1.,
 const S_G = /*wgsl*/`
 // the piece (main.js fills them from params.js): wc water colour + fog density scale, pc water colour in the purple
 // zone + light falloff scale, sc sunlight + bioluminescence, am ambient + daylight, kt kelp tint, ct coral tint,
-// gl trench glow + trench on/off
+// gl trench glow + trench on/off, kd light absorption, si scattering, sk sky through the surface, gr colour grade +
+// saturation
 struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f,
-  wc: vec4f, pc: vec4f, sc: vec4f, am: vec4f, kt: vec4f, ct: vec4f, gl: vec4f };
-const SIG0 = vec3f(.058, .0235, .0195);
-const KD = vec3f(.056, .0245, .0170);
+  wc: vec4f, pc: vec4f, sc: vec4f, am: vec4f, kt: vec4f, ct: vec4f, gl: vec4f, kd: vec4f, si: vec4f, sk: vec4f, gr: vec4f };
 const KDZ = vec3f(.034, .023, .018);
 const TAU = 6.2831853;
 const LOW = ${LV > 1};
@@ -206,12 +205,12 @@ fn sat(x: f32) -> f32 { return clamp(x, 0., 1.); }
 fn ss(a: f32, b: f32, x: f32) -> f32 { let t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); }
 fn ign(p: vec2f) -> f32 { return fract(52.9829189 * fract(dot(p, vec2f(.06711056, .00583715)))); }
 fn hs(x: f32) -> f32 { return fract(sin(x * 127.1) * 43758.5453); }
-fn kd(z: f32) -> vec3f { return mix(KD, KDZ, z) * g.pc.w; }
-fn sg(z: f32) -> vec3f { return mix(SIG0, vec3f(.034, .026, .022), z) * g.wc.w; }
+fn kd(z: f32) -> vec3f { return mix(g.kd.xyz, KDZ, z) * g.pc.w; }
+fn sg(z: f32) -> vec3f { return mix(g.si.xyz, vec3f(.034, .026, .022), z) * g.wc.w; }
 fn fin(c: vec3f) -> vec4f { return vec4f(min(max(c, vec3f(0.)), vec3f(40.)), 1.); }
 const KDF = vec3f(.043, .045, .042);
 fn fogIn(ro: vec3f, rd: vec3f, d: f32, z: f32, sun: vec3f) -> vec3f {
-  let k = mix(KD, KDF, z) * g.pc.w;
+  let k = mix(g.kd.xyz, KDF, z) * g.pc.w;
   let a = sg(z) - k * rd.y;
   let I = (1. - exp(-a * d)) / a;
   let mu = max(dot(rd, sun), 0.);
@@ -605,7 +604,7 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f };
   let rr = refract(V, n, 1.33);
   let sd = max(dot(rr, g.sun.xyz), 0.);
   let fr = pow(1. - sqrt(max(k, 0.)), 5.);
-  let sky = (vec3f(.30, .78, 1.) * 1.3 * clamp(1. + 3.8 * (s.x * .6 - s.y * .8), .25, 3.) + vec3f(1., .95, .85) * (pow(sd, 60.) * 1.3 + pow(sd, 500.) * 12.)) * (1. - fr) * g.am.w;
+  let sky = (g.sk.xyz * 1.3 * clamp(1. + 3.8 * (s.x * .6 - s.y * .8), .25, 3.) + vec3f(1., .95, .85) * (pow(sd, 60.) * 1.3 + pow(sd, 500.) * 12.)) * (1. - fr) * g.am.w;
   let z = zone(i.wp);
   let R = reflect(V, n);
   let refl = fogIn(i.wp, R, 300., z, g.sun.xyz) * 1.15;
@@ -772,7 +771,7 @@ fn sat3(x: vec3f) -> vec3f { return clamp(x, vec3f(0.), vec3f(1.)); }
   var c = textureLoad(tS, px, 0).rgb + acc / ws;
   let bl = textureSampleLevel(tB, sC, uv, 0.).rgb;
   c = mix(c, bl, .06) + bl * .03;
-  c *= g.mis.x;
+  c *= g.mis.x * g.gr.xyz;
   let q = uv - .5;
   c *= 1. - dot(q, q) * .55;
   c = tmap(c);
@@ -780,7 +779,7 @@ fn sat3(x: vec3f) -> vec3f { return clamp(x, vec3f(0.), vec3f(1.)); }
   let l = mix(l0, l0 * l0 * (3. - 2. * l0), .55);
   c *= l / max(l0, 1e-4);
   c = mix(c, vec3f(l), ss(.55, 1., l) * .1);
-  c = mix(vec3f(l), c, .93) + vec3f(.008, .002, 0.);
+  c = mix(vec3f(l), c, g.gr.w) + vec3f(.008, .002, 0.);
   c = pow(max(c, vec3f(0.)), vec3f(1. / 2.2));
   let n = ign(fc.xy) + ign(fc.xy + 37.) - 1.;
   return vec4f(c + n / 255., 1.);

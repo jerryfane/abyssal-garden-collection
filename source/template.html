@@ -7,7 +7,7 @@
 <meta name=theme-color content=#03131c>
 <style>
 /* The class on <body> is the state of the page:
-   l = loading, m = menu, g = in the scene (g p while the mouse is captured), l e = failed to start, g v = no WebGPU: the card */
+   l = loading, m = menu, g = in the scene, l e = failed to start, g v = no WebGPU: the card */
 html { background: #03131c; }
 body {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%; margin: 0; overflow: hidden;
@@ -111,13 +111,20 @@ button:active { transform: translateY(.1em); filter: brightness(.9); }
   #h { display: block; }
 }
 
-/* in the scene: a small menu button (hidden while the mouse is captured, Esc does the same) and the stats line */
+/* in the scene: a small menu button (Esc does the same), a hint that fades away, and the stats line */
 #o {
   position: absolute; top: .6em; right: .6em; display: none; padding: .3em .6em; background: #03222dd9;
   box-shadow: inset 0 0 0 2px #7ff3ff, 0 .3em 1em #0009; font-size: 1.3em; color: #e8fbff; opacity: .8;
 }
 .g #o { display: flex; }
-.p #o, .v #o { display: none; }
+.v #o { display: none; }
+#n {
+  position: absolute; left: 0; right: 0; bottom: 1.2em; margin: 0; text-align: center; font-size: .8em; letter-spacing: .12em;
+  text-transform: uppercase; text-shadow: 0 1px 4px #000; pointer-events: none; opacity: 0;
+}
+.g #n { animation: n 9s; }
+@keyframes n { 10%, 70% { opacity: .85; } }
+.v #n { display: none; }
 #i {
   position: absolute; top: 1em; left: 1.2em; margin: 0; font: .8em/1.6 ui-monospace, Consolas, monospace;
   white-space: pre-wrap; text-shadow: 0 1px 4px #000; pointer-events: none;
@@ -154,6 +161,7 @@ button:active { transform: translateY(.1em); filter: brightness(.9); }
   <p id=f>Abyssal Garden © 2026 Maksymilian Dendura · MIT</p>
 </div>
 <button id=o aria-label=Menu>≡</button>
+<p id=n>Drag to look · W A S D or hold to swim · Esc for the menu</p>
 <pre id=i></pre>
 <script>
 /*SCRIPT*/
