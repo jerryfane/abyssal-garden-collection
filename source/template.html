@@ -11,7 +11,8 @@
 html { background: #03131c; }
 body {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%; margin: 0; overflow: hidden;
-  background: radial-gradient(#0b3a4d, #03131c 70%);
+  --w: #0b3a4d; --g: #7ff3ff; /* water and glow: main.js sets the piece's */
+  background: radial-gradient(var(--w), color-mix(in srgb, var(--w) 27%, #000) 70%);
   font: 700 clamp(13px, .7vw + .9vh, 36px)/1.4 system-ui, sans-serif; color: #e8fbff;
   -webkit-user-select: none; user-select: none;
 }
@@ -28,16 +29,16 @@ canvas {
 body:not(.g) canvas { filter: blur(1vmax) brightness(.5); transform: scale(1.06); }
 .l canvas { opacity: 0; }
 
-/* menu: the loading bar and the buttons share one grid cell, so nothing jumps when they swap */
+/* menu: the loader and the buttons share one grid cell, so nothing jumps when they swap */
 #m {
   position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: min(2.2em, 6vmin);
-  padding: 1em 1em 4.5em; text-align: center; background: radial-gradient(#03131c00 30%, #03131ccc);
+  padding: 1em 1em 4.5em; text-align: center; background: radial-gradient(#0000 30%, color-mix(in srgb, var(--w) 20%, #000c));
   transition: opacity .5s, visibility .5s;
 }
 .g #m, .m #l, .l #g { opacity: 0; visibility: hidden; }
 h1 {
   margin: 0; font: 900 4.4em/1 system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase;
-  color: #0000; background: linear-gradient(#fff 25%, #7ff3ff 60%, #14a9c4);
+  color: #0000; background: linear-gradient(#fff 25%, var(--g) 60%, color-mix(in srgb, var(--g) 55%, var(--w)));
   -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 .06em .2em #000c);
 }
 p { margin: 0; }
@@ -46,20 +47,42 @@ p { margin: 0; }
 #s, #w, #q, #k, #h { font-size: .8em; letter-spacing: .12em; text-transform: uppercase; }
 #w { margin-top: 1.2em; color: #7ff3ff; text-wrap: balance; }
 /* the piece's traits under the title (empty for the genesis garden) */
-#t { margin-top: -.6em; color: #7ff3ff; font-size: .9em; letter-spacing: .1em; text-shadow: 0 .1em .5em #000; }
+#t { margin-top: -.6em; color: var(--g); font-size: .9em; letter-spacing: .1em; text-shadow: 0 .1em .5em #000; }
 #t:empty { display: none; }
 
-/* loading bar */
-#p {
-  height: .5em; margin: .4em 0 1em; overflow: hidden; border-radius: 1em; background: #03131c;
-  box-shadow: 0 0 0 2px #7ff3ff80, 0 0 1.5em #14a9c4;
+/* loading: a depth counter and tape sink 0 → 120 m, the sun's rays fade, the captions are a dive log; at 120 m a
+   glow comes up from the garden. All on the compositor (transform / opacity), so it moves while shaders compile */
+#z { position: absolute; inset: 0; overflow: hidden; }
+.g #z { display: none; }
+#r, #u, #v { position: absolute; inset: 0; }
+#r i {
+  position: absolute; top: -12%; left: var(--x); width: var(--s, 7vmax); height: 100%;
+  background: linear-gradient(color-mix(in srgb, var(--g) 30%, #0000), #0000 85%);
+  transform-origin: 50% 0; rotate: var(--a); filter: blur(1.1vmax); animation: sway 9s ease-in-out infinite alternate;
 }
-#b {
-  display: block; height: 100%; background: linear-gradient(90deg, #14a9c4, #9ff6ff);
-  transform: scaleX(0); transform-origin: 0; will-change: transform;
-}
-.e #p { visibility: hidden; }
-.e #s { font-size: 1.1em; letter-spacing: 0; text-transform: none; }
+#r i:nth-child(2n) { animation-duration: 12s; animation-direction: alternate-reverse; }
+@keyframes sway { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+#u { background: #000; opacity: 0; }
+#v { top: 40%; background: radial-gradient(50% 100% at 50% 100%, color-mix(in srgb, var(--g) 32%, #0000), #0000); opacity: 0; }
+/* depth tape on the right edge: a tick every 5 m, a label every 20 m, read off at the line in the middle */
+#y { position: absolute; top: 0; bottom: 0; right: 1.4em; width: 4.4em; font: 600 .7em/1 ui-monospace, monospace; color: #e8fbffb0; }
+#y::after { content: ''; position: absolute; top: 50%; right: -.6em; width: 2.2em; border-top: 2px solid var(--g); }
+#y b { position: absolute; top: 50%; right: 0; width: 100%; height: 100vh; background: repeating-linear-gradient(#e8fbff60 0 1px, #0000 0 calc(100% / 24)) right / 1em 100% no-repeat; }
+#y i { position: absolute; right: 1.7em; font-style: normal; translate: 0 -50%; }
+#y i::after { content: ''; position: absolute; left: calc(100% + .4em); top: 50%; width: 1.3em; border-top: 1px solid; }
+@media (max-width: 52em) { #y { right: .2em; width: 1.4em; } #y i { display: none; } }
+/* the gauge: a counter that rolls whole metres, then the last two log lines (dimmed) above the current one */
+#x { display: flex; justify-content: center; align-items: center; gap: .6em; color: var(--g); font-size: .8em; letter-spacing: .14em; text-transform: uppercase; }
+#x span { height: 1em; overflow: hidden; font: 700 3.4em/1 ui-monospace, monospace; letter-spacing: 0; color: #fff; filter: drop-shadow(0 0 .2em color-mix(in srgb, var(--g) 60%, #0000)); }
+#x b { display: block; white-space: pre; }
+#j { display: flex; flex-direction: column; justify-content: flex-end; height: 2.24em; margin: .7em 0 .1em; overflow: hidden; }
+#j p, #s { font: 600 .8em/1.4 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
+#j p { color: #e8fbffa8; }
+#j p::before, #s::before { content: attr(data-n); margin-right: .8em; color: var(--g); }
+/* failed to start: only the message stays */
+.e #x, .e #j, .e #y, .e #s::before { display: none; }
+.e #s { font: 700 1.1em/1.4 system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+@media (prefers-reduced-motion: reduce) { #r i { animation: none; } }
 
 /* buttons */
 button {
@@ -132,12 +155,13 @@ button:active { transform: translateY(.1em); filter: brightness(.9); }
 </style>
 </head>
 <body class=l>
+<div id=z><div id=r><i style="--x:3%;--a:24deg"></i><i style="--x:19%;--a:19deg;--s:11vmax"></i><i style="--x:37%;--a:23deg"></i><i style="--x:54%;--a:16deg;--s:13vmax"></i><i style="--x:73%;--a:21deg"></i></div><i id=u></i><i id=v></i><div id=y><b></b></div></div>
 <canvas id=c></canvas>
 <div id=m>
   <h1>Abyssal Garden</h1>
   <p id=t></p>
   <div id=a>
-    <div id=l><div id=p><i id=b></i></div><p id=s>Diving…</p><p id=w hidden>Use Google Chrome for optimal experience</p></div>
+    <div id=l><div id=x>Depth<span><b></b></span>m</div><div id=j></div><p id=s>Diving…</p><p id=w hidden>Use Google Chrome for optimal experience</p></div>
     <div id=g>
       <button id=d>Dive in</button>
       <p id=q><span>Detail</span><button>Low</button><button>Medium</button><button>High</button></p>

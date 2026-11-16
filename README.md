@@ -61,10 +61,10 @@ Estimates in sats, before the ordstudio Plan or your wallet gives exact numbers.
 
 | | Size | vB | 1 sat/vB | 2 sat/vB | 5 sat/vB |
 |---|---|---|---|---|---|
-| Parent (engine) | 107.2 KB, 37.8 KB Brotli | ~9,787 | 9,787 | 19,574 | 48,935 |
+| Parent (engine) | 112.0 KB, 39.5 KB Brotli | ~10,210 | 10,210 | 20,420 | 51,050 |
 | One child | 223 B | ~346 | 346 | 692 | 1,730 |
 | 333 children | | ~115,218 | 115,218 | 230,436 | 576,090 |
-| **Total** | | **~125,005** | **125,005** | **250,010** | **625,025** |
+| **Total** | | **~125,428** | **125,428** | **250,856** | **627,140** |
 
 The parent is scaled from a measured inscription of the original page (34,934 B Brotli: 9,076 vB), about Brotli
 bytes / 4 + 340 vB; a child of N bytes is about N/4 + 290 vB. Not included: the postage each inscription keeps

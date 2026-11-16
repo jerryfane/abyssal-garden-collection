@@ -5,14 +5,31 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('c'), info = $('i'), body = document.body;
 // a phone held upright gets the page turned on its side (see template.html)
 const rot = matchMedia('(orientation:portrait) and (pointer:coarse)');
-// loading bar: each stage glides it to `to` (the share done) over ~`ms` on the compositor, so it moves while this
-// thread is busy
+// loading: each stage logs its caption at its depth (`to`, the share done: 0 → 120 m) and glides the depth counter,
+// the depth tape, the fading rays, the dark and the glow from below there over ~`ms` on the compositor, so they move
+// while this thread is busy
 let loaded = 0, dead; // dead: the graphics device was lost
+const ctr = $('x').querySelector('b'), tape = $('y').firstChild;
+ctr.textContent = Array.from({ length: 121 }, (_, i) => String(i).padStart(3, 0)).join('\n');
+tape.innerHTML = Array.from({ length: 7 }, (_, i) => `<i style=top:${i * 100 / 6}%>${i * 20}</i>`).join('');
 const say = (m, to, ms) => {
-  if (!dead) $('s').textContent = m;
-  const a = $('b').animate({ transform: [`scaleX(${loaded})`, `scaleX(${to})`] }, { duration: ms, fill: 'forwards', easing: 'cubic-bezier(.3,.5,.5,1)' });
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) ms = 0;
+  const s = $('s'), j = $('j'), o = { duration: ms, fill: 'forwards', easing: 'cubic-bezier(.3,.5,.5,1)' }, go = (e, f) => e.animate({ [f(0)[0]]: [f(loaded)[1], f(to)[1]] }, o);
+  if (!dead) {
+    // the last caption moves up into the log (the two latest stay, dimmed)
+    if (s.dataset.n) { const p = s.cloneNode(1); p.removeAttribute('id'); j.append(p); if (j.children[2]) j.firstChild.remove(); }
+    s.dataset.n = String(round(to * 120)).padStart(3, 0) + ' m'; s.textContent = m;
+  }
+  // the counter steps whole metres along the same curve: 40 samples of the bezier, each held until the next
+  const B = (t, p, q) => 3 * (1 - t) * t * ((1 - t) * p + t * q) + t ** 3, k = [];
+  for (let i = 0; i <= 40; i++) k.push({ transform: `translateY(${-round((loaded + (to - loaded) * B(i / 40, .5, 1)) * 120)}em)`, offset: B(i / 40, .3, .5), easing: 'step-end' });
+  const a = ctr.animate(k, { duration: ms, fill: 'forwards' });
+  go(tape, (p) => ['transform', `translateY(${-p * 100}%)`]);
+  go($('r'), (p) => ['opacity', 1 - .88 * p]);
+  go($('u'), (p) => ['opacity', .55 * p]);
+  go($('v'), (p) => ['opacity', max(0, p - .94) / .06]);
   loaded = to;
-  // go on once the animation runs: one not started before the thread gets busy stays stuck (timer: hidden tabs)
+  // go on once the animations run: one not started before the thread gets busy stays stuck (timer: hidden tabs)
   return new Promise((r) => { a.ready.then(() => setTimeout(r)); setTimeout(r, document.hidden ? 0 : 1e3); });
 };
 // the piece: a child inscription sets AG (chain.js reads its block); without AG this is the genesis garden
@@ -23,8 +40,13 @@ PIECE.gs = AG ? 0.5 + 0.5 * clamp(ON.grow, 0, 1) : 1; // growth: kelp height, ke
 const DAY = !AG ? 1 : PIECE.night ? 0 : clamp(0.5 + cos((ON.hour - 13) * PI / 12), 0, 1);
 const NAME = AG ? 'Abyssal Garden #' + ((AG.n | 0) + 1) : 'Abyssal Garden';
 const TRAITS_LINE = [PIECE.palette, PIECE.depth, PIECE.terrain, PIECE.kelp + ' kelp', PIECE.landmark, PIECE.wreck && 'Wreck', PIECE.trench && 'Glowing trench', PIECE.night && 'Night'].filter(Boolean).join(' · ');
-// a piece shows its name, traits and water colour from the first moment of loading
-if (AG) { document.title = NAME; $('t').textContent = '#' + ((AG.n | 0) + 1) + ' · ' + TRAITS_LINE; body.style.background = `radial-gradient(rgb(${PIECE.pal.slice(0, 3).map((c) => c * 90)}),rgb(${PIECE.pal.slice(0, 3).map((c) => c * 20)}) 70%)`; }
+// a piece shows its name, traits and colours from the first moment of loading: water = its palette's water, glow =
+// the water's hue brought up to light
+if (AG) {
+  document.title = NAME; $('t').textContent = '#' + ((AG.n | 0) + 1) + ' · ' + TRAITS_LINE;
+  const w = PIECE.pal.slice(0, 3).map((c) => c * 90), m = max(...w);
+  body.style.setProperty('--w', `rgb(${w})`); body.style.setProperty('--g', `rgb(${w.map((c) => 255 * (.45 + .55 * c / m))})`);
+}
 // no WebGPU (or no adapter): a painted card of this piece instead of the dive
 const adapter = navigator.gpu && await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => 0);
 if (!adapter) return card();
