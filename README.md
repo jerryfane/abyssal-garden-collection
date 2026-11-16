@@ -54,17 +54,18 @@ Every piece also gets its own stretch of seabed around the same landmarks.
 
 ## Costs
 
-Estimates only: the real figure depends on the wallet and the batch. See ordstudio's Plan for exact numbers.
+Estimates in sats, before the ordstudio Plan or your wallet gives exact numbers.
 
 | | Size | vB | 1 sat/vB | 2 sat/vB | 5 sat/vB |
 |---|---|---|---|---|---|
-| Parent (engine) | 99.5 KB, 34.9 KB Brotli | 9,076 | 9,076 | 18,152 | 45,380 |
+| Parent (engine) | 107.2 KB, 37.8 KB Brotli | ~9,787 | 9,787 | 19,574 | 48,935 |
 | One child | 223 B | ~346 | 346 | 692 | 1,730 |
 | 333 children | | ~115,218 | 115,218 | 230,436 | 576,090 |
-| **Total** | | **~124,294** | **124,294** | **248,588** | **621,470** |
+| **Total** | | **~125,005** | **125,005** | **250,010** | **625,025** |
 
-The parent figure was measured; a child of N bytes is about N/4 + 290 vB. Not included: the postage each inscription
-keeps (usually 330 to 546 sats) and any service fee.
+The parent is scaled from a measured inscription of the original page (34,934 B Brotli: 9,076 vB), about Brotli
+bytes / 4 + 340 vB; a child of N bytes is about N/4 + 290 vB. Not included: the postage each inscription keeps
+(usually 330 to 546 sats) and any service fee. `node collection/check-size.mjs` prints the current Brotli size.
 
 ## Build and run locally
 
